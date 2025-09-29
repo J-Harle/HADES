@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import pandas as pd
+import re
 from io import StringIO
 from ase import Atoms, units
 from ase.io import read, write
@@ -50,8 +51,6 @@ def create_ase_objs(smiles_list):
 
     return atoms_list
 
-import re
-
 def safe_smiles_name(smiles):
     """
     Make SMILES safe for use as a directory name.
@@ -71,7 +70,7 @@ def optimise_and_write(atoms_list, smiles_list, base_dir="OPTIMISED_STRUCTURES")
     parent_dir = os.getcwd()
     optimised_dir = os.path.join(parent_dir, base_dir)
 
-    # Make parent dir if it does not exist
+    # Make parent dir if not exists
     os.makedirs(optimised_dir, exist_ok=True)
 
     for atoms, smiles in zip(atoms_list, smiles_list):
@@ -87,6 +86,9 @@ def optimise_and_write(atoms_list, smiles_list, base_dir="OPTIMISED_STRUCTURES")
         # Write optimised xyz inside subdir
         xyz_path = os.path.join(mol_dir, f"{safe_name}.xyz")
         write(xyz_path, atoms)
+
+        # Progress print
+        print(f"Optimised {smiles} → {xyz_path}")
 
 if __name__ == "__main__":
     df = read_csv("PubChem_Filtered_Mols.csv")
