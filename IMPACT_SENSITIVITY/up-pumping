@@ -258,7 +258,7 @@ def histogram(freqs, bwidth, len_bins, base):
             histogram[bins] += 1.0
     return histogram
 
-# Normalize the DOS based on atom count
+# Normalise the DOS based on atom count
 def normalise_dos(dos, atom_count, bwidth, molecule_name):
     """
     Normalizes the DOS to account for the number of vibrational modes (3N).
@@ -268,7 +268,7 @@ def normalise_dos(dos, atom_count, bwidth, molecule_name):
         bwidth (float): Bin width.
         molecule_name (str): Name of the molecule.
     Returns:
-        np.ndarray: Normalized DOS.
+        np.ndarray: Normalised DOS.
     """
     area = np.trapz(dos, dx=bwidth)
     normalisation_factor = 3 * atom_count
@@ -279,7 +279,7 @@ def normalise_dos(dos, atom_count, bwidth, molecule_name):
 # Generate DOS from vibrational frequencies
 def generate_dos(freqs, log_file, atom_count, bwidth, gwidth, filtered_freqs):
     """
-    Generates a normalized DOS from vibrational frequencies.
+    Generates a normalised DOS from vibrational frequencies.
     Args:
         freqs (list): Vibrational frequencies.
         log_file (str): Path to the log file.
