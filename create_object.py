@@ -50,21 +50,47 @@ def create_ase_objs(smiles_list):
 
     return atoms_list
 
+import re
 
-def optimise_and_write(atoms_list, prefix="mol"):
+def safe_smiles_name(smiles):
     """
-    Optimise molecules with ASE and write xyz files.
+    Make SMILES safe for use as a directory name.
+    Replace characters that are invalid on most filesystems.
+    """
+    return re.sub(r'[^A-Za-z0-9._-]', '_', smiles)
+
+
+def optimise_and_write(atoms_list, smiles_list, base_dir="OPTIMISED_STRUCTURES"):
+    """
+    Optimise molecules with ASE and write xyz files into subdirectories.
     Args:
         atoms_list (list[ase.Atoms]): molecules
-        prefix (str): filename prefix
+        smiles_list (list[str]): original SMILES strings
+        base_dir (str): name of parent directory
     """
-    for i, atoms in enumerate(atoms_list):
-        dyn = BFGS(atoms, logfile=f"{prefix}_{i}.log")
-        dyn.run(fmax=0.001)  # eV/Å
-        write(f"{prefix}_{i}.xyz", atoms) # This really needs a better naming convention
+    parent_dir = os.getcwd()
+    optimised_dir = os.path.join(parent_dir, base_dir)
 
+    # Make parent dir if it does not exist
+    os.makedirs(optimised_dir, exist_ok=True)
+
+    for atoms, smiles in zip(atoms_list, smiles_list):
+        # Create subdir for each molecule (safe name)
+        safe_name = safe_smiles_name(smiles)
+        mol_dir = os.path.join(optimised_dir, safe_name)
+        os.makedirs(mol_dir, exist_ok=True)
+
+        # Run optimisation
+        dyn = BFGS(atoms, logfile=os.path.join(mol_dir, f"{safe_name}.log"))
+        dyn.run(fmax=0.001)  # eV/Å
+
+        # Write optimised xyz inside subdir
+        xyz_path = os.path.join(mol_dir, f"{safe_name}.xyz")
+        write(xyz_path, atoms)
 
 if __name__ == "__main__":
-    df = read_csv("__file__")
-    atoms_list = create_ase_objs(df["SMILES"].tolist())
-    optimise_and_write(atoms_list)
+    df = read_csv("PubChem_Filtered_Mols.csv")
+    smiles_list = df["SMILES"].tolist()
+    atoms_list = create_ase_objs(smiles_list)
+    optimise_and_write(atoms_list, smiles_list)
+
