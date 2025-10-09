@@ -1,3 +1,5 @@
+# Calculate oxygen balance and write to CSV
+
 import os
 import csv
 from collections import Counter
@@ -7,7 +9,6 @@ ATOMIC_WEIGHTS = {
     "C": 12.011,
     "N": 14.007,
     "O": 15.999,
-    # extend if needed
 }
 
 def oxygen_balance(C, H, O, mol_weight):
@@ -21,6 +22,7 @@ def process_xyz_files(parent_dir=None, output_csv="out.csv"):
     Walk through subdirectories of parent_dir, read xyz files,
     compute oxygen balance, and write results to CSV with columns:
     Filename, SMILES, Oxygen balance /%
+    If the CSV exists, append new results; otherwise, create it.
     """
     if parent_dir is None:
         parent_dir = os.path.abspath(os.path.join(os.getcwd(), "..", "OPTIMISED_STRUCTURES"))
@@ -31,16 +33,22 @@ def process_xyz_files(parent_dir=None, output_csv="out.csv"):
         print(f"ERROR: parent_dir does not exist: {parent_dir}")
         return False
 
-    # Set CSV to be one directory above parent_dir
+    # Absolute path for output CSV (one directory above parent_dir)
     abs_output = os.path.abspath(os.path.join(parent_dir, "..", output_csv))
     os.makedirs(os.path.dirname(abs_output), exist_ok=True)
 
     fieldnames = ["Filename", "SMILES", "Oxygen balance /%"]
 
+    # Determine if CSV exists already
+    file_exists = os.path.isfile(abs_output)
+
     try:
-        with open(abs_output, "w", newline="") as csvfile:
+        with open(abs_output, "a", newline="") as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writeheader()
+
+            # Write header only if file did not exist
+            if not file_exists:
+                writer.writeheader()
 
             found_any = False
             for root, dirs, files in os.walk(parent_dir):
@@ -59,8 +67,20 @@ def process_xyz_files(parent_dir=None, output_csv="out.csv"):
                         print(f"WARNING: failed to read '{path}': {e}")
                         continue
 
-                    # Extract SMILES (second line if present)
-                    smiles = lines[1].strip() if len(lines) > 1 else ""
+                    # Extract SMILES from 2nd line using colon delimiter
+                    if len(lines) > 1:
+                        line2 = lines[1].strip()
+                        if ":" in line2:
+                            parts = line2.split(":", 1)  # split only once
+                            smiles_part = parts[1].strip()
+                            # remove "SPE ..." if present
+                            if "SPE" in smiles_part:
+                                smiles_part = smiles_part.split("SPE")[0].strip()
+                            smiles = smiles_part
+                        else:
+                            smiles = line2
+                    else:
+                        smiles = ""
 
                     # Extract atom symbols (skip first two lines)
                     atom_lines = lines[2:]
@@ -93,8 +113,6 @@ def process_xyz_files(parent_dir=None, output_csv="out.csv"):
     except Exception as e:
         print(f"ERROR: failed to write CSV '{abs_output}': {e}")
         return False
-
-
 
 if __name__ == "__main__":
     # Run with default parent_dir (../OPTIMISED_STRUCTURES) and default output CSV name
