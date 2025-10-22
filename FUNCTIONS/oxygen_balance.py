@@ -1,5 +1,3 @@
-# Calculate oxygen balance and write to CSV
-
 import os
 import csv
 from collections import Counter
@@ -14,10 +12,6 @@ ATOMIC_WEIGHTS = {
 def oxygen_balance(C, H, O, mol_weight):
     """
     Compute the oxygen balance (OB) in percent for a given molecule.
-
-    Oxygen balance quantifies the degree to which a compound contains
-    sufficient oxygen to fully oxidise its carbon and hydrogen content
-    to CO₂ and H₂O. Negative values indicate oxygen deficiency.
 
     Formula:
         OB(%) = (-1600 / M) * (2C + H/2 - O)
