@@ -49,12 +49,21 @@ sorted_i50 = dict(sorted(i50_values.items(), key=lambda item: item[1]))
 
 # Create directory structure for saving plots
 def create_plot_directories(script_name=None):
-    """
-    Creates a directory structure for storing plots under the 'FIGURES' directory.
-    Args:
-        script_name (str, optional): Name of the script; defaults to the current script name.
-    Returns:
-        str: Path to the base directory for plots.
+    """Create a directory structure for storing plots under the 'FIGURES' directory.
+
+    Parameters
+    ----------
+    script_name : str, optional
+        Name of the script; defaults to the current script name if None.
+
+    Returns
+    -------
+    str
+        Path to the base directory for plots.
+
+    Notes
+    -----
+    Creates subdirectories for different types of plots (e.g., DOS, Box_DOS) under the base directory.
     """
     if script_name is None:
         script_name = os.path.splitext(os.path.basename(__file__))[0]
@@ -87,21 +96,20 @@ def create_plot_directories(script_name=None):
 
 # Read vibrational data from .txt and .xyz files
 def read_txt_xyz_files(xyz_dir):
-    """
-    Reads vibrational mode data from .txt files and corresponding atomic coordinates from .xyz files.
-    Parses eigenvector data, frequencies, and identifies NO₂ groups using atomic connectivity.
-    
-    Args:
-        xyz_dir (str): Directory containing .txt and .xyz files.
-        
-    Returns:
-        list: List of dictionaries, each containing:
-            - molecule (str): Molecule name (from folder name)
-            - frequencies (list): Real-valued vibrational frequencies (cm⁻¹)
-            - atom_count (int): Number of atoms in the molecule
-            - coordinates (list): List of tuples (symbol, x, y, z)
-            - eigenvectors (list): Mode-specific atomic displacements
-            - no2_groups (list): Identified NO₂ group dictionaries (anchor, N, O1, O2)
+    """Retrieve vibrational data and coordinates from .txt and .xyz files.
+
+    Formats data for the main script in the expected tuple format.
+
+    Parameters
+    ----------
+    subdir : str, optional
+        Subdirectory containing .txt and .xyz files (default: "UPPUMPING/OPTIMISED_STRUCTURES/MEDIUM_MODEL").
+
+    Returns
+    -------
+    tuple
+        - list of tuples: Each tuple contains (filename, atom_count, frequencies, atoms, normal_modes)
+        - str: Subdirectory path
     """
     data = []
 
@@ -208,15 +216,20 @@ def read_txt_xyz_files(xyz_dir):
 
 # New function to read .txt and .xyz files and format data for the main script
 def get_file_data_from_txt_xyz(subdir="UPPUMPING/OPTIMISED_STRUCTURES/MEDIUM_MODEL"):
-    """
-    Retrieves vibrational data and coordinates from .txt and .xyz files in the specified directory.
-    Returns data in the format expected by the main script: (filename, atom_count, frequencies, atoms, normal_modes).
-    
-    Args:
-        subdir (str): Subdirectory containing .txt and .xyz files (default: "UPPUMPING/OPTIMISED_STRUCTURES/LARGE_MODEL").
-    
-    Returns:
-        tuple: List of tuples (filename, atom_count, frequencies, atoms, normal_modes) and the subdirectory path.
+    """Retrieve vibrational data and coordinates from .txt and .xyz files.
+
+    Formats data for the main script in the expected tuple format.
+
+    Parameters
+    ----------
+    subdir : str, optional
+        Subdirectory containing .txt and .xyz files (default: "UPPUMPING/OPTIMISED_STRUCTURES/MEDIUM_MODEL").
+
+    Returns
+    -------
+    tuple
+        - list of tuples: Each tuple contains (filename, atom_count, frequencies, atoms, normal_modes)
+        - str: Subdirectory path
     """
     subdir_path = os.path.join(os.getcwd(), subdir)
     if not os.path.exists(subdir_path):
@@ -271,14 +284,21 @@ def get_file_data_from_txt_xyz(subdir="UPPUMPING/OPTIMISED_STRUCTURES/MEDIUM_MOD
 
 # Apply Gaussian broadening to a histogram to create a density of states (DOS)
 def gaussian_broadening(histogram, bwidth=0.5, gwidth=2.5):
-    """
-    Applies Gaussian broadening to a histogram to generate a smooth DOS.
-    Args:
-        histogram (np.ndarray): Input histogram.
-        bwidth (float): Bin width for the histogram.
-        gwidth (float): Gaussian width for broadening.
-    Returns:
-        np.ndarray: Broadened DOS.
+    """Apply Gaussian broadening to a histogram to generate a smooth density of states (DOS).
+
+    Parameters
+    ----------
+    histogram : numpy.ndarray
+        Input histogram.
+    bwidth : float
+        Bin width for the histogram.
+    gwidth : float
+        Gaussian width for broadening.
+
+    Returns
+    -------
+    numpy.ndarray
+        Broadened density of states.
     """
     len_bins = len(histogram)
     dos = np.zeros(len_bins)
@@ -294,15 +314,23 @@ def gaussian_broadening(histogram, bwidth=0.5, gwidth=2.5):
 
 # Create a histogram from vibrational frequencies
 def histogram(freqs, bwidth, len_bins, base):
-    """
-    Creates a histogram of vibrational frequencies.
-    Args:
-        freqs (list): List of vibrational frequencies.
-        bwidth (float): Bin width.
-        len_bins (int): Number of bins.
-        base (float): Minimum frequency for binning.
-    Returns:
-        np.ndarray: Frequency histogram.
+    """Create a histogram of vibrational frequencies.
+
+    Parameters
+    ----------
+    freqs : list
+        List of vibrational frequencies.
+    bwidth : float
+        Bin width for the histogram.
+    len_bins : int
+        Number of bins.
+    base : float
+        Minimum frequency for binning.
+
+    Returns
+    -------
+    numpy.ndarray
+        Frequency histogram.
     """
     histogram = np.zeros(len_bins)
     for freq in freqs:
@@ -313,15 +341,23 @@ def histogram(freqs, bwidth, len_bins, base):
 
 # Normalise the DOS based on atom count
 def normalise_dos(dos, atom_count, bwidth, molecule_name):
-    """
-    Normalizes the DOS to account for the number of vibrational modes (3N).
-    Args:
-        dos (np.ndarray): Density of states.
-        atom_count (int): Number of atoms in the molecule.
-        bwidth (float): Bin width.
-        molecule_name (str): Name of the molecule.
-    Returns:
-        np.ndarray: Normalised DOS.
+    """Normalize the density of states (DOS) based on the number of vibrational modes (3N).
+
+    Parameters
+    ----------
+    dos : numpy.ndarray
+        Density of states.
+    atom_count : int
+        Number of atoms in the molecule.
+    bwidth : float
+        Bin width.
+    molecule_name : str
+        Name of the molecule.
+
+    Returns
+    -------
+    numpy.ndarray
+        Normalized density of states.
     """
     area = np.trapz(dos, dx=bwidth)
     normalisation_factor = 3 * atom_count
@@ -331,17 +367,29 @@ def normalise_dos(dos, atom_count, bwidth, molecule_name):
 
 # Generate DOS from vibrational frequencies
 def generate_dos(freqs, log_file, atom_count, bwidth, gwidth, filtered_freqs):
-    """
-    Generates a normalised DOS from vibrational frequencies.
-    Args:
-        freqs (list): Vibrational frequencies.
-        log_file (str): Path to the log file.
-        atom_count (int): Number of atoms.
-        bwidth (float): Bin width for histogram.
-        gwidth (float): Gaussian width for broadening.
-        filtered_freqs (list): Filtered frequencies for determining max frequency.
-    Returns:
-        tuple: Frequency axis, DOS, and maximum frequency.
+    """Generate a normalized density of states (DOS) from vibrational frequencies.
+
+    Parameters
+    ----------
+    freqs : list
+        Vibrational frequencies.
+    log_file : str
+        Path to the log file.
+    atom_count : int
+        Number of atoms.
+    bwidth : float
+        Bin width for histogram.
+    gwidth : float
+        Gaussian width for broadening.
+    filtered_freqs : list
+        Filtered frequencies for determining maximum frequency.
+
+    Returns
+    -------
+    tuple
+        - numpy.ndarray: Frequency axis
+        - numpy.ndarray: Density of states
+        - float: Maximum frequency
     """
     if not filtered_freqs or atom_count is None:
         print(f"Skipping {log_file}, missing data.")
@@ -360,14 +408,20 @@ def generate_dos(freqs, log_file, atom_count, bwidth, gwidth, filtered_freqs):
 
 # Plot the DOS
 def plot_dos(freq_axis, dos, filename, dpi, base_dir):
-    """
-    Plots the DOS and saves it to a file.
-    Args:
-        freq_axis (np.ndarray): Frequency axis for the plot.
-        dos (np.ndarray): Density of states.
-        filename (str): Name of the log file.
-        dpi (int): Resolution for the plot.
-        base_dir (str): Base directory for saving plots.
+    """Plot the density of states (DOS) and save it to a file.
+
+    Parameters
+    ----------
+    freq_axis : numpy.ndarray
+        Frequency axis for the plot.
+    dos : numpy.ndarray
+        Density of states.
+    filename : str
+        Name of the log file.
+    dpi : int
+        Resolution for the plot.
+    base_dir : str
+        Base directory for saving plots.
     """
     plt.figure(figsize=(12, 9), dpi=dpi)
     plt.plot(freq_axis, dos, label="", color="#000000")
@@ -386,14 +440,22 @@ def plot_dos(freq_axis, dos, filename, dpi, base_dir):
 
 # Generate box-shaped DOS
 def generate_box_dos(freq_axis, dos, omega_max):
-    """
-    Creates a box-shaped DOS up to omega_max.
-    Args:
-        freq_axis (np.ndarray): Frequency axis.
-        dos (np.ndarray): Original DOS.
-        omega_max (float): Maximum frequency for the box.
-    Returns:
-        tuple: Frequency axis and box-shaped DOS.
+    """Create a box-shaped density of states (DOS) up to a maximum frequency.
+
+    Parameters
+    ----------
+    freq_axis : numpy.ndarray
+        Frequency axis.
+    dos : numpy.ndarray
+        Original density of states.
+    omega_max : float
+        Maximum frequency for the box.
+
+    Returns
+    -------
+    tuple
+        - numpy.ndarray: Frequency axis
+        - numpy.ndarray: Box-shaped density of states
     """
     box_dos = np.copy(dos)
     # box_area = 6
@@ -403,14 +465,20 @@ def generate_box_dos(freq_axis, dos, omega_max):
 
 # Plot box-shaped DOS
 def plot_box_dos(filtered_freq_axis, filtered_dos, filename, dpi, base_dir):
-    """
-    Plots the box-shaped DOS and saves it.
-    Args:
-        filtered_freq_axis (np.ndarray): Frequency axis.
-        filtered_dos (np.ndarray): Box-shaped DOS.
-        filename (str): Name of the log file.
-        dpi (int): Resolution for the plot.
-        base_dir (str): Base directory for saving plots.
+    """Plot the box-shaped density of states (DOS) and save it to a file.
+
+    Parameters
+    ----------
+    filtered_freq_axis : numpy.ndarray
+        Frequency axis.
+    filtered_dos : numpy.ndarray
+        Box-shaped density of states.
+    filename : str
+        Name of the log file.
+    dpi : int
+        Resolution for the plot.
+    base_dir : str
+        Base directory for saving plots.
     """
     plt.figure(figsize=(12, 9), dpi=dpi)
     plt.plot(filtered_freq_axis, filtered_dos, label="")
@@ -429,13 +497,19 @@ def plot_box_dos(filtered_freq_axis, filtered_dos, filename, dpi, base_dir):
 
 # Apply Bose-Einstein scaling to DOS
 def bose_einstein_dos(box_dos, freq_axis):
-    """
-    Applies Bose-Einstein scaling to the box-shaped DOS.
-    Args:
-        box_dos (np.ndarray): Box-shaped DOS.
-        freq_axis (np.ndarray): Frequency axis.
-    Returns:
-        np.ndarray: Bose-Einstein scaled DOS.
+    """Apply Bose-Einstein scaling to the box-shaped density of states (DOS).
+
+    Parameters
+    ----------
+    box_dos : numpy.ndarray
+        Box-shaped density of states.
+    freq_axis : numpy.ndarray
+        Frequency axis.
+
+    Returns
+    -------
+    numpy.ndarray
+        Bose-Einstein scaled density of states.
     """
     be_dos = np.copy(box_dos)
     hbar, k, t = scipy.constants.hbar, scipy.constants.k, 300
@@ -447,15 +521,22 @@ def bose_einstein_dos(box_dos, freq_axis):
 
 # Plot Bose-Einstein scaled DOS
 def plot_be_dos(freq_axis, be_dos, filename, atom_count, dpi, base_dir):
-    """
-    Plots the Bose-Einstein scaled DOS and saves it.
-    Args:
-        freq_axis (np.ndarray): Frequency axis.
-        be_dos (np.ndarray): Bose-Einstein scaled DOS.
-        filename (str): Name of the log file.
-        atom_count (int): Number of atoms.
-        dpi (int): Resolution for the plot.
-        base_dir (str): Base directory for saving plots.
+    """Plot the Bose-Einstein scaled density of states (DOS) and save it to a file.
+
+    Parameters
+    ----------
+    freq_axis : numpy.ndarray
+        Frequency axis.
+    be_dos : numpy.ndarray
+        Bose-Einstein scaled density of states.
+    filename : str
+        Name of the log file.
+    atom_count : int
+        Number of atoms.
+    dpi : int
+        Resolution for the plot.
+    base_dir : str
+        Base directory for saving plots.
     """
     plt.figure(figsize=(12, 9), dpi=dpi)
     plt.plot(freq_axis, be_dos, label="", color="#000000")
@@ -474,15 +555,26 @@ def plot_be_dos(freq_axis, be_dos, filename, atom_count, dpi, base_dir):
 
 # Perform first convolution of Bose-Einstein DOS
 def first_convolution(freq_axis, be_dos, omega_max, bwidth):
-    """
-    Performs the first convolution of the Bose-Einstein DOS with itself.
-    Args:
-        freq_axis (np.ndarray): Frequency axis.
-        be_dos (np.ndarray): Bose-Einstein scaled DOS.
-        omega_max (float): Maximum frequency.
-        bwidth (float): Bin width.
-    Returns:
-        tuple: Convolved DOS, frequency axis, unprojected convolved DOS, and original DOS.
+    """Perform the first convolution of the Bose-Einstein density of states (DOS) with itself.
+
+    Parameters
+    ----------
+    freq_axis : numpy.ndarray
+        Frequency axis.
+    be_dos : numpy.ndarray
+        Bose-Einstein scaled density of states.
+    omega_max : float
+        Maximum frequency.
+    bwidth : float
+        Bin width.
+
+    Returns
+    -------
+    tuple
+        - numpy.ndarray: Convolved density of states
+        - numpy.ndarray: Frequency axis
+        - numpy.ndarray: Unprojected convolved density of states
+        - numpy.ndarray: Original Bose-Einstein density of states
     """
     conv_freq_axis = np.linspace(0, 2 * np.max(freq_axis), len(freq_axis) * 2 - 1)
     convolved_raw = np.convolve(be_dos, be_dos, mode="full")
@@ -494,16 +586,26 @@ def first_convolution(freq_axis, be_dos, omega_max, bwidth):
 
 # Plot first convolution
 def plot_first_convolution(freq_axis, first_convolved_dos, first_conv_no_proj, be_dos, filename, atom_count, dpi, base_dir):
-    """
-    Plots the first convolved DOS alongside the Bose-Einstein DOS.
-    Args:
-        freq_axis (np.ndarray): Frequency axis.
-        first_convolved_dos (np.ndarray): First convolved DOS.
-        be_dos (np.ndarray): Bose-Einstein scaled DOS.
-        filename (str): Name of the log file.
-        atom_count (int): Number of atoms.
-        dpi (int): Resolution for the plot.
-        base_dir (str): Base directory for saving plots.
+    """Plot the first convolved density of states (DOS) alongside the Bose-Einstein DOS.
+
+    Parameters
+    ----------
+    freq_axis : numpy.ndarray
+        Frequency axis.
+    first_convolved_dos : numpy.ndarray
+        First convolved density of states.
+    first_conv_no_proj : numpy.ndarray
+        Unprojected first convolved density of states.
+    be_dos : numpy.ndarray
+        Bose-Einstein scaled density of states.
+    filename : str
+        Name of the log file.
+    atom_count : int
+        Number of atoms.
+    dpi : int
+        Resolution for the plot.
+    base_dir : str
+        Base directory for saving plots.
     """
     fig, ax1 = plt.subplots(figsize=(12, 9), dpi=dpi)
     ax1.plot(freq_axis, first_convolved_dos, label="First Convolution (Projected)", color="#000000")
@@ -531,16 +633,26 @@ def plot_first_convolution(freq_axis, first_convolved_dos, first_conv_no_proj, b
 
 # Perform second convolution
 def second_convolution(first_convolved_dos, first_conv_freq_axis, be_dos, original_freq_axis, omega_max):
-    """
-    Performs the second convolution of the first convolved DOS with the Bose-Einstein DOS.
-    Args:
-        first_convolved_dos (np.ndarray): First convolved DOS.
-        first_conv_freq_axis (np.ndarray): Frequency axis for first convolution.
-        be_dos (np.ndarray): Bose-Einstein scaled DOS.
-        original_freq_axis (np.ndarray): Original frequency axis.
-        omega_max (float): Maximum frequency.
-    Returns:
-        tuple: Second convolved DOS and unprojected second convolved DOS.
+    """Perform the second convolution of the first convolved DOS with the Bose-Einstein DOS.
+
+    Parameters
+    ----------
+    first_convolved_dos : numpy.ndarray
+        First convolved density of states.
+    first_conv_freq_axis : numpy.ndarray
+        Frequency axis for first convolution.
+    be_dos : numpy.ndarray
+        Bose-Einstein scaled density of states.
+    original_freq_axis : numpy.ndarray
+        Original frequency axis.
+    omega_max : float
+        Maximum frequency.
+
+    Returns
+    -------
+    tuple
+        - numpy.ndarray: Second convolved density of states
+        - numpy.ndarray: Unprojected second convolved density of states
     """
     conv_freq_axis = np.linspace(0, 2*np.max(original_freq_axis), len(original_freq_axis)*2 - 1)
     convolved_raw = np.convolve(first_convolved_dos, be_dos, mode='full')
@@ -552,19 +664,30 @@ def second_convolution(first_convolved_dos, first_conv_freq_axis, be_dos, origin
 
 # Plot second convolution
 def plot_second_convolution(second_convolved_dos, freq_axis, be_dos, filename, lower_bound, upper_bound, second_conv_no_projection, omega_max, dpi, base_dir):
-    """
-    Plots the second convolved DOS alongside the Bose-Einstein DOS.
-    Args:
-        second_convolved_dos (np.ndarray): Second convolved DOS.
-        freq_axis (np.ndarray): Frequency axis.
-        be_dos (np.ndarray): Bose-Einstein scaled DOS.
-        filename (str): Name of the log file.
-        lower_bound (float): Lower frequency bound for integration.
-        upper_bound (float): Upper frequency bound for integration.
-        second_conv_no_projection (np.ndarray): Unprojected second convolved DOS.
-        omega_max (float): Maximum frequency.
-        dpi (int): Resolution for the plot.
-        base_dir (str): Base directory for saving plots.
+    """Plot the second convolved density of states (DOS) alongside the Bose-Einstein DOS.
+
+    Parameters
+    ----------
+    second_convolved_dos : numpy.ndarray
+        Second convolved density of states.
+    freq_axis : numpy.ndarray
+        Frequency axis.
+    be_dos : numpy.ndarray
+        Bose-Einstein scaled density of states.
+    filename : str
+        Name of the log file.
+    lower_bound : float
+        Lower frequency bound for integration.
+    upper_bound : float
+        Upper frequency bound for integration.
+    second_conv_no_projection : numpy.ndarray
+        Unprojected second convolved density of states.
+    omega_max : float
+        Maximum frequency.
+    dpi : int
+        Resolution for the plot.
+    base_dir : str
+        Base directory for saving plots.
     """
     fig, ax1 = plt.subplots(figsize=(12, 9), dpi=dpi)
     ax1.plot(freq_axis, second_convolved_dos, color='#000000', alpha=0.7, label="Second Convolution DOS")
@@ -593,16 +716,29 @@ def plot_second_convolution(second_convolved_dos, freq_axis, be_dos, filename, l
 
 # Plot normalised integrals vs I50 values
 def plot_max_min_normalised(i50_values, integral_values, molecule_omega_max, freq_data, molecule_bounds, dpi, base_dir):
-    """
-    Plots normalised integral values vs I50 values with a linear fit on inverse I50.
-    Args:
-        i50_values (dict): Dictionary of molecule data including I50 values.
-        integral_values (dict): Dictionary of integral values per molecule.
-        molecule_omega_max (dict): Dictionary of maximum frequencies per molecule.
-        freq_data (list): List of frequency data tuples.
-        molecule_bounds (dict): Dictionary of frequency bounds per molecule.
-        dpi (int): Resolution for the plot.
-        base_dir (str): Base directory for saving plots.
+    """Plot normalized integral values vs I50 values with a linear fit on inverse I50.
+
+    Parameters
+    ----------
+    i50_values : dict
+        Dictionary of molecule data including I50 values.
+    integral_values : dict
+        Dictionary of integral values per molecule.
+    molecule_omega_max : dict
+        Dictionary of maximum frequencies per molecule.
+    freq_data : list
+        List of frequency data tuples.
+    molecule_bounds : dict
+        Dictionary of frequency bounds per molecule.
+    dpi : int
+        Resolution for the plot.
+    base_dir : str
+        Base directory for saving plots.
+
+    Returns
+    -------
+    dict
+        Empty dictionary (for compatibility with original code).
     """
     molecule_to_freqs = {}
     for filename, atom_count, frequencies, atoms, normal_modes in freq_data:
@@ -691,15 +827,22 @@ def plot_max_min_normalised(i50_values, integral_values, molecule_omega_max, fre
 
 # Print a summary table of results
 def print_summary_table(original_displacement_frequencies, molecule_omega_max, area_by_molecule, i50_values, freq_data, molecule_bounds):
-    """
-    Prints a summary table of molecule data, including omega_max, bounds, I50, and integrals.
-    Args:
-        original_displacement_frequencies (dict): Dictionary of displacement frequencies.
-        molecule_omega_max (dict): Dictionary of maximum frequencies.
-        area_by_molecule (dict): Dictionary of integral areas.
-        i50_values (dict): Dictionary of molecule data including I50 values.
-        freq_data (list): List of frequency data tuples.
-        molecule_bounds (dict): Dictionary of frequency bounds.
+    """Print a summary table of molecule data, including omega_max, bounds, I50, and integrals.
+
+    Parameters
+    ----------
+    original_displacement_frequencies : dict
+        Dictionary of displacement frequencies.
+    molecule_omega_max : dict
+        Dictionary of maximum frequencies.
+    area_by_molecule : dict
+        Dictionary of integral areas.
+    i50_values : dict
+        Dictionary of molecule data including I50 values.
+    freq_data : list
+        List of frequency data tuples.
+    molecule_bounds : dict
+        Dictionary of frequency bounds.
     """
     print("\nSummary Table (with molecule-specific bounds):")
     print(f"{'Molecule':<20} {'ω_max (cm⁻¹)':>15} {'Upper Bound (cm⁻¹)':>20} {'i50 (Nm)':>10} {'# Peaks in DOS':>15} {'Area':>20} {'Area/# Peaks':>15}")
@@ -737,23 +880,39 @@ def print_summary_table(original_displacement_frequencies, molecule_omega_max, a
 
 # Calculate Euclidean distance between two coordinates
 def distance(coord1, coord2):
-    """
-    Computes the Euclidean distance between two 3D coordinates.
-    Args:
-        coord1 (tuple): First coordinate.
-        coord2 (tuple): Second coordinate.
-    Returns:
-        float: Euclidean distance.
+    """Compute the Euclidean distance between two 3D coordinates.
+
+    Parameters
+    ----------
+    coord1 : tuple
+        First coordinate (x, y, z).
+    coord2 : tuple
+        Second coordinate (x, y, z).
+
+    Returns
+    -------
+    float
+        Euclidean distance between the coordinates.
     """
     return np.linalg.norm(np.array(coord1) - np.array(coord2))
 
 def unit(v):
-    """
-    Normalizes a vector to unit length 1
-    Args:
-        v (np.ndarray): Input vector.
-    Returns:
-        np.ndarray: Normalised vector.
+    """Normalize a vector to unit length.
+
+    Parameters
+    ----------
+    v : numpy.ndarray
+        Input vector.
+
+    Returns
+    -------
+    numpy.ndarray
+        Normalized vector.
+
+    Raises
+    ------
+    ValueError
+        If the input vector has zero length.
     """
     v = np.asarray(v, float)
     n = np.linalg.norm(v)
@@ -763,12 +922,17 @@ def unit(v):
 
 # Define a plane basis from an axis
 def plane_basis_from_axis(u):
-    """
-    Creates an orthonormal basis for a plane perpendicular to the given axis.
-    Args:
-        u (np.ndarray): Axis vector.
-    Returns:
-        tuple: Two orthonormal vectors (e1, e2) spanning the plane.
+    """Create an orthonormal basis for a plane perpendicular to the given axis.
+
+    Parameters
+    ----------
+    u : numpy.ndarray
+        Axis vector.
+
+    Returns
+    -------
+    tuple
+        Two orthonormal vectors (e1, e2) spanning the plane.
     """
     u = unit(u)
     helper = np.array([1.0, 0.0, 0.0])
@@ -781,16 +945,25 @@ def plane_basis_from_axis(u):
 
 # Calculate angle in a fixed plane
 def angle_in_fixed_plane(point, origin, u_axis, e1, e2):
-    """
-    Computes the angle of a point relative to an origin in a plane defined by e1 and e2.
-    Args:
-        point (np.ndarray): Point coordinates.
-        origin (np.ndarray): Origin coordinates.
-        u_axis (np.ndarray): Axis defining the plane normal.
-        e1 (np.ndarray): First basis vector of the plane.
-        e2 (np.ndarray): Second basis vector of the plane.
-    Returns:
-        float: Angle in radians, or np.nan if the point lies on the axis.
+    """Compute the angle of a point relative to an origin in a plane defined by basis vectors.
+
+    Parameters
+    ----------
+    point : numpy.ndarray
+        Point coordinates.
+    origin : numpy.ndarray
+        Origin coordinates.
+    u_axis : numpy.ndarray
+        Axis defining the plane normal.
+    e1 : numpy.ndarray
+        First basis vector of the plane.
+    e2 : numpy.ndarray
+        Second basis vector of the plane.
+
+    Returns
+    -------
+    float
+        Angle in radians, or np.nan if the point lies on the axis.
     """
     O = np.asarray(origin, float)
     P = np.asarray(point, float)
@@ -806,24 +979,35 @@ def angle_in_fixed_plane(point, origin, u_axis, e1, e2):
 
 # Wrap angle to [-π, π]
 def wrap_to_pi(a):
-    """
-    Wraps an angle to the range [-π, π].
-    Args:
-        a (float): Input angle in radians.
-    Returns:
-        float: Wrapped angle in radians.
+    """Wrap an angle to the range [-π, π].
+
+    Parameters
+    ----------
+    a : float
+        Input angle in radians.
+
+    Returns
+    -------
+    float
+        Wrapped angle in radians.
     """
     return (a + np.pi) % (2*np.pi) - np.pi
 
 # Identify NO2 groups in the molecule
 def identify_no2_groups(atoms, bond_threshold):
-    """
-    Identifies NO2 groups based on atomic connectivity and bond distance threshold.
-    Args:
-        atoms (list): List of atom dictionaries with index, atomic number, and coordinates.
-        bond_threshold (float): Maximum distance for a bond (in Angstroms).
-    Returns:
-        list: List of NO2 group dictionaries with anchor, N, O1, and O2 atoms.
+    """Identify NO2 groups based on atomic connectivity and bond distance threshold.
+
+    Parameters
+    ----------
+    atoms : list
+        List of atom dictionaries with index, atomic number, and coordinates.
+    bond_threshold : float
+        Maximum distance for a bond (in Angstroms).
+
+    Returns
+    -------
+    list
+        List of NO2 group dictionaries with anchor, N, O1, and O2 atoms.
     """
     no2_groups = []
     for atom in atoms:
@@ -865,12 +1049,17 @@ def identify_no2_groups(atoms, bond_threshold):
 
 # Assemble atomic masses
 def assemble_masses(atoms):
-    """
-    Creates an array of atomic masses for the given atoms.
-    Args:
-        atoms (list): List of atom dictionaries.
-    Returns:
-        np.ndarray: Array of atomic masses.
+    """Create an array of atomic masses for the given atoms.
+
+    Parameters
+    ----------
+    atoms : list
+        List of atom dictionaries with atomic number (Z).
+
+    Returns
+    -------
+    numpy.ndarray
+        Array of atomic masses in atomic mass units (amu).
     """
     periodic = {
         1: 1.008, 6: 12.011, 7: 14.007, 8: 15.999,
@@ -879,38 +1068,60 @@ def assemble_masses(atoms):
 
 # Extract coordinates from atoms
 def coords_from_atoms(atoms):
-    """
-    Extracts 3D coordinates from a list of atoms.
-    Args:
-        atoms (list): List of atom dictionaries.
-    Returns:
-        np.ndarray: Array of coordinates.
+    """Extract 3D coordinates from a list of atoms.
+
+    Parameters
+    ----------
+    atoms : list
+        List of atom dictionaries with coordinates.
+
+    Returns
+    -------
+    numpy.ndarray
+        Array of coordinates.
     """
     return np.array([a['coords'] for a in atoms], float)
 
 # Update atom coordinates
 def apply_coords_to_atoms(atoms, new_coords):
-    """
-    Updates the coordinates of atoms with new values.
-    Args:
-        atoms (list): List of atom dictionaries.
-        new_coords (np.ndarray): New coordinates to apply.
+    """Update the coordinates of atoms with new values.
+
+    Parameters
+    ----------
+    atoms : list
+        List of atom dictionaries.
+    new_coords : numpy.ndarray
+        New coordinates to apply.
     """
     for a, c in zip(atoms, new_coords):
         a['coords'] = tuple(map(float, c))
 
 # Displace coordinates along a vibrational mode
 def displace_along_mode(coords, mode_vec, amplitude_angstrom, masses_amu=None, already_mass_weighted=True):
-    """
-    Displaces atomic coordinates along a vibrational mode.
-    Args:
-        coords (np.ndarray): Original coordinates.
-        mode_vec (np.ndarray): Vibrational mode vector.
-        amplitude_angstrom (float): Displacement amplitude.
-        masses_amu (np.ndarray, optional): Atomic masses.
-        already_mass_weighted (bool): Whether the mode is mass-weighted.
-    Returns:
-        np.ndarray: Displaced coordinates.
+    """Displace atomic coordinates along a vibrational mode.
+
+    Parameters
+    ----------
+    coords : numpy.ndarray
+        Original coordinates.
+    mode_vec : numpy.ndarray
+        Vibrational mode vector.
+    amplitude_angstrom : float
+        Displacement amplitude in Angstroms.
+    masses_amu : numpy.ndarray, optional
+        Atomic masses in atomic mass units.
+    already_mass_weighted : bool, optional
+        Whether the mode is mass-weighted (default: True).
+
+    Returns
+    -------
+    numpy.ndarray
+        Displaced coordinates.
+
+    Raises
+    ------
+    ValueError
+        If masses_amu is not provided for ase modes or if the mode vector has zero norm.
     """
     mode = np.array(mode_vec, dtype=float)
     if already_mass_weighted:
@@ -926,16 +1137,25 @@ def displace_along_mode(coords, mode_vec, amplitude_angstrom, masses_amu=None, a
 
 # Calculate NO2 angle changes for a vibrational mode
 def no2_angle_changes_for_mode(group, atoms, mode_vec, amplitude_angstrom=1, already_mass_weighted=True):
-    """
-    Computes the change in NO2 angles when displaced along a vibrational mode.
-    Args:
-        group (dict): NO2 group dictionary with anchor, N, O1, and O2 atoms.
-        atoms (list): List of atom dictionaries.
-        mode_vec (np.ndarray): Vibrational mode vector.
-        amplitude_angstrom (float): Displacement amplitude.
-        already_mass_weighted (bool): Whether the mode is mass-weighted.
-    Returns:
-        dict: Dictionary containing original and displaced angles and their differences.
+    """Compute the change in NO₂ angles when displaced along a vibrational mode.
+
+    Parameters
+    ----------
+    group : dict
+        NO₂ group dictionary with anchor, N, O1, and O2 atoms.
+    atoms : list
+        List of atom dictionaries.
+    mode_vec : numpy.ndarray
+        Vibrational mode vector.
+    amplitude_angstrom : float, optional
+        Displacement amplitude in Angstroms (default: 1).
+    already_mass_weighted : bool, optional
+        Whether the mode is mass-weighted (default: True).
+
+    Returns
+    -------
+    dict
+        Dictionary containing original and displaced angles and their differences.
     """
     coords_opt = coords_from_atoms(atoms)
     masses = assemble_masses(atoms)
@@ -975,19 +1195,30 @@ def plot_no2_angle_vs_frequency(frequencies, normal_modes, atoms, no2_groups,
                                 already_mass_weighted=True,
                                 molecule_name="molecule", dpi=100,
                                 min_angle_deg=0.0, base_dir=None):
-    """
-    Plots the maximum NO2 angle change vs vibrational frequency.
-    Args:
-        frequencies (list): Vibrational frequencies.
-        normal_modes (list): Normal mode vectors.
-        atoms (list): List of atom dictionaries.
-        no2_groups (list): List of NO2 group dictionaries.
-        amplitude_angstrom (float): Displacement amplitude.
-        already_mass_weighted (bool): Whether modes are mass-weighted.
-        molecule_name (str): Name of the molecule.
-        dpi (int): Resolution for the plot.
-        min_angle_deg (float): Minimum angle change for inclusion.
-        base_dir (str): Base directory for saving plots.
+    """Plot the maximum NO₂ angle change vs vibrational frequency.
+
+    Parameters
+    ----------
+    frequencies : list
+        Vibrational frequencies.
+    normal_modes : list
+        Normal mode vectors.
+    atoms : list
+        List of atom dictionaries.
+    no2_groups : list
+        List of NO₂ group dictionaries.
+    amplitude_angstrom : float, optional
+        Displacement amplitude in Angstroms (default: 1).
+    already_mass_weighted : bool, optional
+        Whether modes are mass-weighted (default: True).
+    molecule_name : str, optional
+        Name of the molecule (default: "molecule").
+    dpi : int, optional
+        Resolution for the plot (default: 100).
+    min_angle_deg : float, optional
+        Minimum angle change for inclusion in degrees (default: 0.0).
+    base_dir : str, optional
+        Base directory for saving plots.
     """
     angle_changes = []
     freq_list = []
@@ -1036,14 +1267,20 @@ def plot_no2_angle_vs_frequency(frequencies, normal_modes, atoms, no2_groups,
 
 # Plot chosen and correct frequency vs NO2 angle
 def plot_chosen_and_correct_freq_angle(molecule_name, valid_modes, i50_values, dpi, base_dir):
-    """
-    Plots vibrational modes with NO2 angle changes, highlighting chosen and correct frequencies.
-    Args:
-        molecule_name (str): Name of the molecule.
-        valid_modes (list): List of (frequency, angle) tuples.
-        i50_values (dict): Dictionary of molecule data including correct frequencies.
-        dpi (int): Resolution for the plot.
-        base_dir (str): Base directory for saving plots.
+    """Plot vibrational modes with NO₂ angle changes, highlighting chosen and correct frequencies.
+
+    Parameters
+    ----------
+    molecule_name : str
+        Name of the molecule.
+    valid_modes : list
+        List of (frequency, angle) tuples.
+    i50_values : dict
+        Dictionary of molecule data including correct frequencies.
+    dpi : int
+        Resolution for the plot.
+    base_dir : str
+        Base directory for saving plots.
     """
     if not valid_modes:
         print(f"No valid modes for {molecule_name}. Skipping plot.")
@@ -1224,4 +1461,3 @@ if __name__ == "__main__":
     print_summary_table(original_displacement_frequencies, molecule_omega_max, area_by_molecule, i50_values, freq_data, molecule_bounds)
     if plot_enabled['max_min_normalised']:
         plot_max_min_normalised(i50_values, area_by_molecule, molecule_omega_max, freq_data, molecule_bounds, dpi, base_dir)
-    # print_summary_table(original_displacement_frequencies, molecule_omega_max, area_by_molecule, i50_values, freq_data, molecule_bounds)
