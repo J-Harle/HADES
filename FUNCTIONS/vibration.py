@@ -8,18 +8,36 @@ from ase.vibrations import Vibrations
 from mace.calculators import MACECalculator
 
 
-# Suppress MACE and torch warnings
+# Suppress non-critical warnings from MACE and torch initialisation
 warnings.filterwarnings("ignore", message=".*TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD.*")
 warnings.filterwarnings("ignore", message=".*cuequivariance.*")
 
-# Define directories
+# -------------------------------------------------------------
+# Directory setup
+# -------------------------------------------------------------
+# script_dir : directory of this script
+# calc_dir   : path to the MACE model file
+# xyz_dir    : directory containing optimised XYZ structures
+# -------------------------------------------------------------
 script_dir = os.path.dirname(os.path.abspath(__file__))
 calc_dir = os.path.join(script_dir, "../CALCULATORS/MACE-OFF23_small.model")
 xyz_dir = os.path.join(script_dir, "../OPTIMISED_STRUCTURES/PUBCHEM/SMALL_MODEL")
 
 
 def calculator(model_path):
-    """Initialise a new calculator (must be done inside each process)."""
+    """
+    Create and return a MACE calculator for use in a subprocess.
+
+    Parameters
+    ----------
+    model_path : str
+        Path to the pre-trained MACE model file.
+
+    Returns
+    -------
+    MACECalculator
+        Configured MACE calculator (CPU-based, double precision).
+    """
     return MACECalculator(
         model_path=model_path,
         dispersion=False,
@@ -29,7 +47,32 @@ def calculator(model_path):
 
 
 def process_xyz(xyz_path):
-    """Run vibrational analysis on a single XYZ file."""
+    """
+    Perform vibrational analysis for a single `.xyz` molecular structure.
+
+    The function:
+        1. Loads the structure using ASE.
+        2. Runs finite-difference vibrational analysis via `ase.vibrations.Vibrations`.
+        3. Writes all vibrational frequencies and eigenvectors to a text file.
+        4. Cleans temporary vibration directories.
+
+    Parameters
+    ----------
+    xyz_path : str
+        Absolute path to the `.xyz` file to be processed.
+
+    Returns
+    -------
+    tuple
+        (xyz_file, status)
+        - xyz_file : filename of the structure.
+        - status : "success" or error message string if the job failed.
+
+    Notes
+    -----
+    Each process creates a unique temporary directory for vibration data
+    (e.g., `vib_temp_<PID>`) to avoid I/O conflicts between parallel workers.
+    """
     try:
         xyz_file = os.path.basename(xyz_path)
         root = os.path.dirname(xyz_path)
@@ -41,7 +84,7 @@ def process_xyz(xyz_path):
 
         vib_dir = os.path.join(root, f"vib_temp_{os.getpid()}")  # unique temp dir per process
 
-        # Clean old vibration data if exists
+        # Clean up any old vibration data
         if os.path.exists(vib_dir):
             shutil.rmtree(vib_dir)
 
@@ -64,6 +107,7 @@ def process_xyz(xyz_path):
                     f.write(f'Atom {j+1} ({atom.symbol}): '
                             f'{vec[0]:.6f}, {vec[1]:.6f}, {vec[2]:.6f}\n')
 
+        # Clean up temporary vibration data
         vib.clean()
         if os.path.isdir(vib_dir):
             shutil.rmtree(vib_dir)
@@ -72,18 +116,30 @@ def process_xyz(xyz_path):
         return xyz_file, "success"
 
     except Exception as e:
+        # Return failure message to main process
         return xyz_path, f"failed: {e}"
 
 
 def calc_vibrations_parallel(ncores=56):
-    """Run vibrations in parallel across multiple XYZ files."""
+    """
+    Perform vibrational frequency calculations for all `.xyz` files in parallel.
+
+    Parameters
+    ----------
+    ncores : int, optional
+        Number of CPU cores (processes) to use for parallel execution.
+        Default is 56.
+
+    Notes
+    -----
+    - Each subprocess creates its own calculator instance to prevent race conditions.
+    - Results (success/failure) are streamed live to stdout.
+    """
     xyz_files = []
     for root, dirs, files in os.walk(xyz_dir):
         for f in files:
             if f.endswith(".xyz"):
                 xyz_files.append(os.path.join(root, f))
-
-    # print(f"Found {len(xyz_files)} structures. Running on {ncores} workers.\n")
 
     with ProcessPoolExecutor(max_workers=ncores) as executor:
         futures = {executor.submit(process_xyz, xyz): xyz for xyz in xyz_files}
