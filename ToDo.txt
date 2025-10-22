@@ -1,0 +1,4 @@
+To do:
+
+- Need to finish Enthalpy of formation script. It was never finished.
+- Moved CSVs to /PACKAGE/CSVs -- Need to update create_object.py
