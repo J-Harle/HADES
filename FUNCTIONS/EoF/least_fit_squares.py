@@ -6,7 +6,7 @@ from collections import Counter
 import numpy as np
 
 # "NAME": "SMILES", EXPERIMENTAL ENERGY (Kcal/mol -> Ha), MACE ENERGIES (eV -> Ha), PAPER ENERGY (Ha)
-fitting_dict = {
+fitting_dict = { # 20 mols in test set
     "nitromethane": {
         "SMILES": "C[N+](=O)[O-]",
         "Experiment_Energy": -19.3 / 627.5095,
@@ -78,15 +78,6 @@ fitting_dict = {
         "MACE energy": -13941.16408853 / 27.211386245988, # LARGE
         "Paper energy": -512.1535723,
     },
-
-    # "nitro4phenol": {
-    #     "SMILES": "C1=CC(=CC=C1[N+](=O)[O-])O",
-    #     "Experiment_Energy": 27.41 / 627.5095,
-    #     "MACE energy": -13941.21155085 / 27.211386245988, # SMALL
-    #     # "MACE energy": -13941.21393941 / 27.211386245988, # MEDIUM
-    #     # "MACE energy": -13941.20866505 / 27.211386245988, # LARGE
-    #     "Paper energy": -512.1567977,
-    # },
 
     "mnitroaniline": {
         "SMILES": "C1=CC(=CC(=C1)[N+](=O)[O-])N",
@@ -195,19 +186,10 @@ fitting_dict = {
         "Paper energy": -1768.2654374,
     },
 
-    # "hexanitroethane": {
-    #     "SMILES": "C(C([N+](=O)[O-])([N+](=O)[O-])[N+](=O)[O-])([N+](=O)[O-])([N+](=O)[O-])[N+](=O)[O-]",
-    #     "Experiment_Energy": 42.8 / 627.5095,
-    #     "MACE energy": -35581.35362901 / 27.211386245988, # SMALL
-    #     # "MACE energy":  -35581.38938505 / 27.211386245988, # MEDIUM
-    #     # "MACE energy": -35581.42930880 / 27.211386245988, # LARGE
-    #     "Paper energy": -1307.1561375,
-
-    # },
 }
 
 
-test_dict = {
+test_dict = { # 9 in test set
         "methylnitrite": {
         "SMILES": "CON=O",
         "Experiment_Energy": -15.64 / 627.5095,
@@ -288,21 +270,29 @@ test_dict = {
         "MACE energy": -18531.42580645 / 27.211386245988, # LARGE
         "Paper energy": -680.7851161
         },
-
-    # "methyl1nitro4benzene": {
-    #     "SMILES": "CC1=CC=C(C=C1)[N+](=O)[O-]",
-    #     "Experiment_Energy": 7.38 / 627.5095,
-    #     "MACE energy":  / 27.211386245988, # SMALL
-        # "MACE energy":  / 27.211386245988, # MEDIUM
-    #     "MACE energy":  / 27.211386245988, # LARGE
-    #     "Paper energy": -476.2339492,
-    # },        
+       
 }
 
 HARTREE_TO_KCAL = 627.5095
 
-# === Dynamic atom and bond label generation ===
 def get_dynamic_labels(*smiles_dicts):
+    """
+    Generate dynamic atom and bond labels from one or more SMILES dictionaries.
+
+    This function parses all SMILES strings provided in the input dictionaries,
+    adds explicit hydrogens, and collects unique labels for atoms and bonds.
+    Aromatic atoms are distinguished with the suffix "_arom".
+
+    Args:
+        *smiles_dicts: One or more dictionaries containing molecule data.
+            Each dictionary should map molecule names to a sub-dictionary
+            containing a "SMILES" key.
+
+    Returns:
+        tuple[list[str], list[str]]: Two sorted lists:
+            - atom_labels: unique atom labels including aromatic variants.
+            - bond_labels: unique bond labels including bond order.
+    """
     atom_labels = set()
     bond_labels = set()
 
@@ -334,9 +324,31 @@ def get_dynamic_labels(*smiles_dicts):
 
     return sorted(atom_labels), sorted(bond_labels)
 
-
-# === Feature vector builder ===
 def build_feature_vectors(SMILES_dict, atom_labels, bond_labels):
+    """
+    Build molecular feature vectors based on atom and bond counts.
+
+    For each molecule in the input dictionary, this function constructs a feature
+    vector consisting of:
+      - counts of all atom types defined in `atom_labels`
+      - counts of all bond types defined in `bond_labels`
+
+    Explicit hydrogens are added before counting to ensure consistency.
+    Aromatic atoms are labelled with "_arom". The resulting feature vector
+    concatenates atom and bond count features.
+
+    Args:
+        SMILES_dict (dict): Dictionary mapping molecule names to data including
+            a "SMILES" key.
+        atom_labels (list[str]): List of atom labels to include in feature vectors.
+        bond_labels (list[str]): List of bond labels to include in feature vectors.
+
+    Returns:
+        tuple[dict[str, list[int]], dict[str, dict[str, int]]]:
+            - feature_vectors: mapping of molecule names to numerical feature vectors.
+            - atom_counts_dict: mapping of molecule names to atom count dictionaries
+              (simple counts by element symbol).
+    """    
     feature_vectors = {}
     atom_counts_dict = {}
 
@@ -377,14 +389,37 @@ def build_feature_vectors(SMILES_dict, atom_labels, bond_labels):
     return feature_vectors, atom_counts_dict
 
 
-# === Fit model ===
-from sklearn.metrics import mean_absolute_error
-
 HARTREE_TO_KCAL = 627.5095
 
 
-# === Fit model ===
 def fit_atomic_bond_contributions(fitting_dict, atom_labels, bond_labels):
+    """
+    Fit atomic and bond contributions to experimental formation enthalpies
+    using least squares regression.
+
+    The function constructs feature vectors for all molecules in the fitting set
+    and fits a linear model of the form:
+
+        E_exp ≈ intercept + Σ_i (n_i * w_i)
+
+    where `n_i` are atom and bond counts, and `w_i` are their fitted contributions.
+
+    Model performance (R² and MAE) is computed, and both experimental and predicted
+    enthalpies are plotted with a secondary error axis.
+
+    Args:
+        fitting_dict (dict): Dictionary of molecules with experimental energies
+            and SMILES strings.
+        atom_labels (list[str]): List of atom labels.
+        bond_labels (list[str]): List of bond labels.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+            - coeffs: full regression coefficients (including intercept).
+            - contributions: atom and bond contribution coefficients (Ha).
+            - y_pred: predicted energies (Ha).
+            - r2: coefficient of determination for the fitting set.
+    """
     feature_vectors, _ = build_feature_vectors(fitting_dict, atom_labels, bond_labels)
 
     X = np.array(list(feature_vectors.values()))
@@ -449,6 +484,26 @@ def fit_atomic_bond_contributions(fitting_dict, atom_labels, bond_labels):
 
 # === Predict test set ===
 def predict_test_set(test_dict, atom_labels, bond_labels, coeffs):
+    """
+    Predict formation enthalpies for a test set using fitted atomic and bond coefficients.
+
+    This function builds molecular feature vectors for the test set and applies the
+    linear model obtained from the fitting set. Model performance metrics (R² and MAE)
+    are reported, and predicted vs. experimental energies are plotted with a
+    secondary y-axis for prediction error.
+
+    Args:
+        test_dict (dict): Dictionary of test molecules with experimental energies
+            and SMILES strings.
+        atom_labels (list[str]): List of atom labels used for feature construction.
+        bond_labels (list[str]): List of bond labels used for feature construction.
+        coeffs (np.ndarray): Regression coefficients obtained from the fitting step.
+
+    Returns:
+        tuple[np.ndarray, float]:
+            - y_pred_test: predicted test set energies (Ha).
+            - r2_test: coefficient of determination for the test set.
+    """
     feature_vectors, _ = build_feature_vectors(test_dict, atom_labels, bond_labels)
 
     X_test = np.array(list(feature_vectors.values()))
