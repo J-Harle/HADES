@@ -1,2 +1,2 @@
-# PACKAGE
-Software package for the in silico design of energetic materials
+# HADES
+High-throughput Analysis for the Design of Energetic Systems
