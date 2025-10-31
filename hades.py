@@ -1,4 +1,4 @@
-""" Main for HADES - High-throughput Analysis for Discovery of Energetic Systems """
+""" Main for HADES - High-throughput Analysis for the Design of Energetic Systems """
 
 import argparse
 import subprocess
@@ -12,12 +12,12 @@ header = r"""
  | |  | |_ / ____ \ _| |__| |_| |____ _ ____) |
  |_|  |_(_)_/    \_(_)_____/(_)______(_)_____/ 
                                       
- High-throughput Analysis for Discovery of Energetic Systems
+ High-throughput Analysis for the Design of Energetic Systems
 """ 
 print(header)
 
 parser = argparse.ArgumentParser(
-    description="HADES: High-throughput Analysis for Discovery of Energetic Systems"
+    description="HADES: High-throughput Analysis for the Design of Energetic Systems"
 )
 
 # Input and output files
@@ -60,38 +60,36 @@ def main():
     print(f"Input: {args.input if args.input else 'None (auto-generation mode)'}")
     print(f"Output: {args.output}")
 
-    if args.generate.lower() == "y":
-        subprocess.run(["python", f"{parent_dir}/MODULES/substitution.py",
-                        "-i", args.input or "none",
-                        "-o", args.output])
-        print(header)
+    # Create a list of (step_name, flag, command) for enabled modules
+    steps = []
 
+    if args.generate.lower() == "y":
+        steps.append(("Generating molecules", ["python", f"{parent_dir}/MODULES/substitution.py",
+                                               "-i", args.input or "none",
+                                               "-o", args.output]))
 
     if args.optimise_generated.lower() == "y":
-        print("\n[2/6] Running optimisation module...")
-        subprocess.run(["python", f"{parent_dir}/create_object.py", "-i", args.output])
-        print(header)
-
+        steps.append(("Optimising generated molecules", ["python", f"{parent_dir}/MODULES/create_object.py", "-i", args.output]))
 
     if args.vibration.lower() == "y":
-        print("\n[3/6] Running vibrations module...")
-        subprocess.run(["python", "MODULES/vibrations.py", "-i", args.output])
-        print(header)
+        steps.append(("Calculating vibrations", ["python", "MODULES/vibrations.py", "-i", args.output]))
 
     if args.impact_sensitivity.lower() == "y":
-        print("\n[4/6] Running impact sensitivity module...")
-        subprocess.run(["python", "MODULES/uppumping.py", "-i", args.output])
-        print(header)
+        steps.append(("Calculating impact sensitivity", ["python", "MODULES/uppumping.py", "-i", args.output]))
 
     if args.oxygen_balance.lower() == "y":
-        print("\n[5/6] Running oxygen balance module...")
-        subprocess.run(["python", "MODULES/oxygen_balance.py", "-i", args.output])
-        print(header)
+        steps.append(("Calculating oxygen balance", ["python", "MODULES/oxygen_balance.py", "-i", args.output]))
 
     if args.enthalpy_of_formation.lower() == "y":
-        print("\n[6/6] Running enthalpy of formation module...")
-        subprocess.run(["python", "MODULES/enthalpy_of_formation.py", "-i", args.output])
+        steps.append(("Calculating enthalpy of formation", ["python", "MODULES/enthalpy_of_formation.py", "-i", args.output]))
+
+    total_steps = len(steps)
+
+    for i, (description, command) in enumerate(steps, start=1):
+        print(f"\n[{i}/{total_steps}] {description}...")
+        subprocess.run(command)
         print(header)
+
 
 if __name__ == "__main__":
     parent_dir = os.getcwd()
