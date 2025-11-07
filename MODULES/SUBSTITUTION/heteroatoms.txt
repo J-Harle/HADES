@@ -1,0 +1,5 @@
+oxygen : [*]O
+nitrogen: [*]N
+#carbon: C
+#sulphur: S
+#phosphorus: P
