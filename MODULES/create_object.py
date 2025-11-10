@@ -206,8 +206,8 @@ def optimise_and_write_single(args):
 
 
 def optimise_and_write_parallel(atoms_list, smiles_list, id_list,
-                                base_dir="OPTIMISED_STRUCTURES/LARGE_MODEL",
-                                ncores=64):
+                                base_dir="../OPTIMISED_STRUCTURES/LARGE_MODEL",
+                                ncores=56):
     """
     Run geometry optimisations in parallel using multiple CPU cores.
 
@@ -260,8 +260,6 @@ def optimise_and_write_parallel(atoms_list, smiles_list, id_list,
         # Ensure executor is fully shut down
         executor.shutdown(wait=True, cancel_futures=True)
 
-    # Force garbage collection and process cleanup
-    import gc
     gc.collect()
     for child in multiprocessing.active_children():
         child.join(timeout=1)
@@ -271,12 +269,12 @@ def optimise_and_write_parallel(atoms_list, smiles_list, id_list,
 
 
 if __name__ == "__main__":
-    df = read_csv("../hades_test_out.csv")   # <-- corrected path
+    df = read_csv("../hades_out.csv")  
     smiles_list = df["SMILES"].tolist()
     id_list = df["CID"].tolist()
     atoms_list = create_ase_objs(smiles_list)
 
-    results = optimise_and_write_parallel(atoms_list, smiles_list, id_list, ncores=64)
+    results = optimise_and_write_parallel(atoms_list, smiles_list, id_list, ncores=56)
 
     gc.collect()
     multiprocessing.active_children()
