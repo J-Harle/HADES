@@ -12,16 +12,9 @@ from mace.calculators import MACECalculator
 warnings.filterwarnings("ignore", message=".*TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD.*")
 warnings.filterwarnings("ignore", message=".*cuequivariance.*")
 
-# -------------------------------------------------------------
-# Directory setup
-# -------------------------------------------------------------
-# script_dir : directory of this script
-# calc_dir   : path to the MACE model file
-# xyz_dir    : directory containing optimised XYZ structures
-# -------------------------------------------------------------
 script_dir = os.path.dirname(os.path.abspath(__file__))
-calc_dir = os.path.join(script_dir, "../CALCULATORS/MACE-OFF23_small.model")
-xyz_dir = os.path.join(script_dir, "../OPTIMISED_STRUCTURES/PUBCHEM/SMALL_MODEL")
+calc_dir = os.path.join(script_dir, "../CALCULATORS/MACE-OFF23_large.model")
+xyz_dir = os.path.join(script_dir, "../OPTIMISED_STRUCTURES/LARGE_MODEL")
 
 
 def calculator(model_path):
