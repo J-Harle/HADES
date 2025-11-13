@@ -124,7 +124,7 @@ def read_txt_xyz_files(xyz_dir):
             freqs, coordinates, eigenvectors = [], [], []
             atom_count = None
 
-            with open(txt_path, "r", encoding="utf-8") as f:
+            with open(txt_path, "r", encoding="latin-1") as f:
                 lines = [line.strip() for line in f if line.strip()]
 
             for line in lines:
@@ -180,7 +180,7 @@ def read_txt_xyz_files(xyz_dir):
 
             if xyz_path and os.path.exists(xyz_path):
                 try:
-                    with open(xyz_path, "r", encoding="utf-8") as f:
+                    with open(xyz_path, "r") as f: # , encoding="utf-8") as f:
                         xyz_lines = f.readlines()[2:]
                 except UnicodeDecodeError:
                     with open(xyz_path, "r", encoding="latin-1", errors="ignore") as f:
@@ -1340,14 +1340,14 @@ if __name__ == "__main__":
     
     # Enable/disable specific plots
     plot_enabled = {
-        'dos': False,
-        'box_dos': False,
-        'be_dos': False,
-        'first_convolution': False,
-        'second_convolution': False,
-        'no2_angle': False,
+        'dos': True,
+        'box_dos': True,
+        'be_dos': True,
+        'first_convolution': True,
+        'second_convolution': True,
+        'no2_angle': True,
         'max_min_normalised': True,
-        'chosen_correct_angle': False,
+        'chosen_correct_angle': True,
     }
 
     # Read and parse .txt and .xyz files
@@ -1413,7 +1413,7 @@ if __name__ == "__main__":
 
         molecule_omega_max[molecule_name] = omega_max
         lower_bound = 1.0 * omega_max
-        upper_bound = 4.0 * omega_max
+        upper_bound = 3.0 * omega_max
         molecule_bounds[molecule_name] = {'lower': lower_bound, 'upper': upper_bound}
 
         # Generate and plot DOS-related data
