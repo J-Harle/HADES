@@ -1,102 +1,113 @@
- nitro : [*][N+](=O)[O-]
- nitrate : [*]O[N+](=O)[O-]
- hydroxyl : [*]O
- ketone : [*]C(=O)C
- aldehyde : [*]C(=O)
- amine : [*]N
- peroxide : [*]OO
- nitramine : [*]N([N+](=O)[O-])
- nitroformyl : [*]C(=O)[N+](=O)[O-]
- hydrazino :[*]NN
- azido : [N-]=[N+]=N[*]
- cyano : [*]C#N
- nitroso : [*]N=O
- carboxyl : [*]C(=O)O
- ester : [*]C(=O)O
- amide : [*]C(=O)N
- urethane / carbamate : [*]OC(=O)N
- azoxy : [*]N=N(O)
- azo : [*]N=N
- imino : [*]C=N
- guanidino : [*]NC(=N)N
+nitro : [*][N+](=O)[O-]
+nitrate : [*]O[N+](=O)[O-]
+hydroxyl : [*]O
+ketone : [*]C(=O)C
+aldehyde : [*]C(=O)
+amine : [*]N
+peroxide : [*]OO
+nitramine : [*]N([N+](=O)[O-])
+nitroformyl : [*]C(=O)[N+](=O)[O-]
+hydrazino :[*]NN
+azido : [N-]=[N+]=N[*]
+cyano : [*]C#N
+nitroso : [*]N=O
+carboxyl : [*]C(=O)O
+ester : [*]C(=O)O
+amide : [*]C(=O)N
+urethane / carbamate : [*]OC(=O)N
+azoxy : [*]N=N(O)
+azo : [*]N=N
+imino : [*]C=N
+guanidino : [*]NC(=N)N
 
 
- benzene: [*]Cc1ccccc1
- methane : [*]C
- ethane : [*]CC
- ethene : [*]C=C
- ethyne : [*]C#C
- propane : [*]CCC
- propene : [*]CC=C
- propyne : [*]CC#C
- toluene : [*]Cc1ccccc1  
- phenol : [*]c1ccccc1O  
- cyclohexane : [*]C1CCCCC1 
- pyridine : [*]n1ccccc1 
- pyrazine : [*]c1cnccn1 
- pyrimidine : [*]n1cnccc1 
- pyridazine : [*]n1ncccc1 
- triazine_123 : [*]n1nnccc1 
- triazine_124 : [*]n1ccncn1
- triazine_135 : [*]n1cncnc1 
- tetrazine_1234 : [*]n1nnncc1 
- tetrazine_1235 : [*]n1cncnn1 
- tetrazine_1245 : [*]n1cnncn1 
- imidazole : [*]c1cnc[nH]1       
- pyrazole : [*]c1c[nH]nc1          
- triazole_123 : [*]c1cnn[nH]1      
- triazole_124 : [*]c1ncn[nH]1      
- tetrazole : [*]c1nnn[nH]1         
- napthalene : [*]c1ccc2ccccc2c1 
+#benzene: [*]Cc1ccccc1
+#methane : [*]C
+#ethane : [*]CC
+#ethene : [*]C=C
+#ethyne : [*]C#C
+#propane : [*]CCC
+# Can definetly add isopropane here
+
+#propene : [*]CC=C
+#propene : [*]C=CC
+
+#propyne : [*]CC#C
+#propyne : [*]C#CC
+
+#toluene : *c1ccc(C)cc1
+#toluene : c1c([*])cc(C)cc1
+#toluene : c1cc([*])c(C)cc1
 
 
-# nitro : [N+](=O)[O-]
-# nitrate : O[N+](=O)[O-]
-# hydroxyl : O
-# ketone : C(=O)C
-# aldehyde : C(=O)
-# amine : N
-# peroxide : OO
-# nitramine : N([N+](=O)[O-])
-# nitroformyl : C(=O)[N+](=O)[O-]
-# hydrazino NN
-# azido : [N-]=[N+]=N
-# cyano : C#N
-# nitroso : N=O
-# carboxyl : C(=O)O
-# ester : C(=O)O
-# amide : C(=O)N
-# urethane / carbamate : OC(=O)N
-# azoxy : N=N(O)
-# azo : N=N
-# imino : C=N
-# guanidino : NC(=N)N
+#phenol : [*]c1ccccc1O  
+#phenol : Oc1c([*])cccc1
+#phenol : Oc1cc([*])ccc1
+#phenol : Oc1ccc([*])cc1
 
 
-# benzene: Cc1ccccc1
-# methane : C
-# ethane : CC
-# ethene : C=C
-# ethyne : C#C
-# propane : CCC
-# propene : CC=C
-# propyne : CC#C
-# toluene : Cc1ccccc1  
-# phenol : c1ccccc1O  
-# cyclohexane : C1CCCCC1 
-# pyridine : n1ccccc1 
-# pyrazine : c1cnccn1 
-# pyrimidine : n1cnccc1 
-# pyridazine : n1ncccc1 
-# triazine_123 : n1nnccc1 
-# triazine_124 : n1ccncn1
-# triazine_135 : n1cncnc1 
-# tetrazine_1234 : n1nnncc1 
-# tetrazine_1235 : n1cncnn1 
-# tetrazine_1245 : n1cnncn1 
-# imidazole : c1cnc[nH]1       
-# pyrazole : c1c[nH]nc1          
-# triazole_123 : c1cnn[nH]1      
-# triazole_124 : c1ncn[nH]1      
-# tetrazole : c1nnn[nH]1         
-# napthalene : c1ccc2ccccc2c1 
+#cyclohexane : [*]C1CCCCC1 
+
+
+#pyrazine : n1c([*])cncc1
+
+
+#pyrimidine: [*]c1ncccc1
+#pyrimidine : c1ncc([*])cc1 
+#pyrimidine: c1nccc([*])c1 
+
+
+#pyridazine : n1nc([*])ccc1
+#pyridazine : n1ncc([*])cc1
+
+
+#triazine_123 : n1nnc([*])cc1
+#triazine_123 : n1nncc([*])c1
+
+
+#triazine_124 : n1c([*])cncn1
+#triazine_124 : n1cc([*])ncn1
+#triazine_124 : n1ccnc([*])n1
+
+
+#triazine_135 : n1c([*])ncnc1 
+
+
+#tetrazine_1234 : n1nnnc([*])c1 
+
+
+#tetrazine_1235 : n1c([*])ncnn1 
+
+
+#tetrazine_1245 : n1c([*])nncn1 
+
+
+#imidazole : c1([*])cnc[nH]1
+#imidazole : c1c([*])nc[nH]1     
+#imidazole : c1cnc([*])[nH]1    
+#imidazole : c1cnc[n]([*])1
+
+
+#pyrazole : c([*])1c[nH]nc1
+#pyrazole : c1c([*])[nH]nc1  
+#pyrazole : c1c[n]([*])nc1
+#pyrazole : c1c[nH]nc([*])1
+
+
+#triazole_123 : c([*])1cnn[nH]1
+#triazole_123 : c1c([*])nn[nH]1 
+#triazole_123 : c1cnn[n]([*])1 
+
+
+#triazole_124 : c([*])1ncn[nH]1    
+#triazole_124 : c1nc([*])n[nH]1    
+#triazole_124 : c1ncn[n]([*])1    
+
+
+#tetrazole : c([*])1nnn[nH]1   
+#tetrazole : c1nnn[n]([*])1    
+
+
+#napthalene : c([*])1ccc2ccccc2c1 
+#napthalene : c1c([*])cc2ccccc2c1 
+#napthalene : c1cc([*])c2ccccc2c1 

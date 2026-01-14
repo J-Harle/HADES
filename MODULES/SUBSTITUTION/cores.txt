@@ -1,11 +1,11 @@
 # Hydrocarbon chains
-#methane : C
-#ethane : CC
-#ethene : C=C
-#ethyne : C#C
-#propane : CCC
-#propene : CC=C
-#propyne : CC#C
+methane : C
+ethane : CC
+ethene : C=C
+ethyne : C#C
+propane : CCC
+propene : CC=C
+propyne : CC#C
 
 # Aromatic cycloalkanes
 #benzene : c1ccccc1 
@@ -19,7 +19,7 @@
 #pyridine : n1ccccc1 
 
 # Two nitrogen heterocycles
-pyrazine : c1cnccn1 
+#pyrazine : c1cnccn1 
 #pyrimidine : n1cnccc1 
 #pyridazine : n1ncccc1 
 
@@ -41,4 +41,4 @@ pyrazine : c1cnccn1
 #tetrazole : c1nnn[nH]1         
 
 # Fused aromatic rings
-#napthalene : c1ccc2ccccc2c1 
+#naphthalene : c1ccc2ccccc2c1 
