@@ -2,21 +2,25 @@ import argparse
 import pandas as pd
 import os
 from rdkit import Chem
-from rdkit.Chem import AllChem
-from collections import Counter
+from rdkit.Chem import AllChem, GraphDescriptors
+from tqdm import tqdm
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
-csv_path = os.path.join(script_dir, "..", "hades_out.csv")
+default_csv_path = os.path.join(script_dir, "..", "hades_out.csv")
 
-parser = argparse.ArgumentParser(description="Calculate generic molecular properties and append to the CSV")
-parser.add_argument("--input", "-i", type=str, default="hades_out.csv",
-                    help="Output CSV filename from HADES main script")
+parser = argparse.ArgumentParser(
+    description="Calculate generic molecular properties and overwrite/append them in the CSV"
+)
+parser.add_argument(
+    "--input", "-i", type=str, default=default_csv_path,
+    help="CSV file to read from and write back to"
+)
 args = parser.parse_args()
 
 
 def read_csv(csv_path):
     df = pd.read_csv(csv_path)
-    print(df.info())
+    # print(df.info())
     return df
 
 
@@ -48,37 +52,47 @@ def calc_genprop(df):
         "bond_dicts": []
     }
 
-    all_bond_keys = set()  # collect all possible bond types
+    all_bond_keys = set()
 
-    for smi in df["SMILES"]:
+    nitro_smarts = Chem.MolFromSmarts("[N+](=O)[O-]")
+    hbd_smarts = Chem.MolFromSmarts("[N,H,O;!$(*=O)]")
+    hba_smarts = Chem.MolFromSmarts("[N,O;!$(*=O)]")
+
+    for smi in tqdm(
+        df["SMILES"],
+        total=len(df),
+        desc="Calculating molecular descriptors",
+        unit="molecule"
+    ):
         mol = Chem.MolFromSmiles(smi)
         if mol is None:
-            for key in features.keys():
+            for key in features:
                 features[key].append(None)
             continue
+
         mol = Chem.AddHs(mol)
 
         # --- atom counts ---
-        c = len([a for a in mol.GetAtoms() if a.GetSymbol() == "C" and not a.GetIsAromatic()])
-        h = len([a for a in mol.GetAtoms() if a.GetSymbol() == "H"])
-        n = len([a for a in mol.GetAtoms() if a.GetSymbol() == "N" and not a.GetIsAromatic()])
-        o = len([a for a in mol.GetAtoms() if a.GetSymbol() == "O" and not a.GetIsAromatic()])
+        atoms = list(mol.GetAtoms())
+
+        c = sum(a.GetSymbol() == "C" and not a.GetIsAromatic() for a in atoms)
+        h = sum(a.GetSymbol() == "H" for a in atoms)
+        n = sum(a.GetSymbol() == "N" and not a.GetIsAromatic() for a in atoms)
+        o = sum(a.GetSymbol() == "O" and not a.GetIsAromatic() for a in atoms)
+
+        arom_c = sum(a.GetSymbol() == "C" and a.GetIsAromatic() for a in atoms)
+        arom_n = sum(a.GetSymbol() == "N" and a.GetIsAromatic() for a in atoms)
+        arom_o = sum(a.GetSymbol() == "O" and a.GetIsAromatic() for a in atoms)
+
+        total_atoms = c + h + n + o + arom_c + arom_n + arom_o
 
         features["c_count"].append(c)
         features["h_count"].append(h)
         features["n_count"].append(n)
         features["o_count"].append(o)
-
-        # --- aromatic atoms ---
-        arom_c = len([a for a in mol.GetAtoms() if a.GetSymbol() == "C" and a.GetIsAromatic()])
-        arom_n = len([a for a in mol.GetAtoms() if a.GetSymbol() == "N" and a.GetIsAromatic()])
-        arom_o = len([a for a in mol.GetAtoms() if a.GetSymbol() == "O" and a.GetIsAromatic()])
-
         features["arom_c_count"].append(arom_c)
         features["arom_n_count"].append(arom_n)
         features["arom_o_count"].append(arom_o)
-
-        total_atoms = c + h + n + o + arom_c + arom_n + arom_o
         features["atom_count"].append(total_atoms)
 
         # --- ratios ---
@@ -94,7 +108,7 @@ def calc_genprop(df):
             features["o_ratio"].append(None)
 
         # --- nitro groups ---
-        features["no2_count"].append(len(mol.GetSubstructMatches(Chem.MolFromSmarts("[N+](=O)[O-]"))))
+        features["no2_count"].append(len(mol.GetSubstructMatches(nitro_smarts)))
 
         # --- molecular weight ---
         features["mol_wt"].append(AllChem.CalcExactMolWt(mol))
@@ -104,56 +118,70 @@ def calc_genprop(df):
         for bond in mol.GetBonds():
             a1 = bond.GetBeginAtom().GetSymbol()
             a2 = bond.GetEndAtom().GetSymbol()
-            atoms = "-".join(sorted([a1, a2]))
+            atoms_key = "-".join(sorted([a1, a2]))
             bond_type = str(bond.GetBondType())
-            key = f"{atoms}_{bond_type}"
+            key = f"{atoms_key}_{bond_type}"
             bond_info[key] = bond_info.get(key, 0) + 1
             all_bond_keys.add(key)
+
         features["bond_dicts"].append(bond_info)
 
         # --- H-bonding ---
-        donors = len(mol.GetSubstructMatches(Chem.MolFromSmarts("[N,H,O;!$(*=O)]")))
-        acceptors = len(mol.GetSubstructMatches(Chem.MolFromSmarts("[N,O;!$(*=O)]")))
+        donors = len(mol.GetSubstructMatches(hbd_smarts))
+        acceptors = len(mol.GetSubstructMatches(hba_smarts))
+
         features["h_bond_donors"].append(donors)
         features["h_bond_acceptors"].append(acceptors)
 
         if acceptors > 0:
             features["h_bond_ratio"].append(donors / acceptors)
-        elif donors > 0 and acceptors == 0:
+        elif donors > 0:
             features["h_bond_ratio"].append("Div0Error")
         else:
             features["h_bond_ratio"].append(0)
 
-        # --- rotatable bonds (phi placeholder) ---
-        features["rotatable_bond_count"].append(AllChem.CalcNumRotatableBonds(mol))
-        features["phi"].append(None)
+        # --- rotatable bonds ---
+        features["rotatable_bond_count"].append(
+            AllChem.CalcNumRotatableBonds(mol)
+        )
 
-        # --- some specific bond counts (optional convenience) ---
+        # --- Kier flexibility ---
+        k1 = GraphDescriptors.Kappa1(mol)
+        k2 = GraphDescriptors.Kappa2(mol)
+        heavy_atoms = mol.GetNumHeavyAtoms()
+
+        features["phi"].append(
+            (k1 * k2) / heavy_atoms if heavy_atoms > 0 else None
+        )
+
+        # --- specific bond counts ---
         features["n_n_bond_count"].append(bond_info.get("N-N_SINGLE", 0))
         features["o_h_bond_count"].append(bond_info.get("H-O_SINGLE", 0))
         features["n_o_bond_count"].append(bond_info.get("N-O_SINGLE", 0))
         features["o_o_bond_count"].append(bond_info.get("O-O_SINGLE", 0))
 
-        # --- Kier flexinbility --- #
-        k1 = rdkit.Chem.GraphDescriptors.Kappa1(mol)
-        k2 = rdkit.Chem.GraphDescriptors.Kappa2(mol)
-        features["phi"] = (k1 * k2) / total_atoms
-        
-    # Convert to DataFrame
     feat_df = pd.DataFrame(features)
 
-    # --- expand bond_dicts into separate columns ---
-    bond_df = pd.DataFrame([{k: d.get(k, 0) for k in all_bond_keys} for d in feat_df["bond_dicts"]])
-    bond_df = bond_df.fillna(0).astype(int)
-    feat_df = pd.concat([feat_df.drop(columns=["bond_dicts"]), bond_df], axis=1)
+    bond_df = pd.DataFrame(
+        [{k: d.get(k, 0) for k in all_bond_keys} for d in feat_df["bond_dicts"]]
+    ).fillna(0).astype(int)
 
-    # Combine with the original CSV
-    return pd.concat([df, feat_df], axis=1)
+    feat_df = pd.concat(
+        [feat_df.drop(columns=["bond_dicts"]), bond_df],
+        axis=1
+    )
+
+    return feat_df
 
 
 if __name__ == "__main__":
+    csv_path = args.input
+
     df = read_csv(csv_path)
-    df_new = calc_genprop(df)
-    out_path = os.path.join(script_dir, "..", "hades_extra_out.csv")
-    df_new.to_csv(out_path, index=False)
-    print(f"\n New CSV written to: {out_path}")
+    feat_df = calc_genprop(df)
+
+    for col in feat_df.columns:
+        df[col] = feat_df[col]
+
+    df.to_csv(csv_path, index=False)
+    print(f"\nAppended to CSV: {csv_path}")
