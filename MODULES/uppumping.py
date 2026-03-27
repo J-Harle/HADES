@@ -12,7 +12,7 @@ scripts = [
     "plotting.py",
 ]
 
-base_dir = os.path.join(os.path.dirname(__file__), "MODULES")
+base_dir = os.path.join(os.path.dirname(__file__), "UPPUMPING")
 
 for script in scripts:
     script_path = os.path.join(base_dir, script)
