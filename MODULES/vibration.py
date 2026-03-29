@@ -58,7 +58,7 @@ calc_dir = os.path.abspath(
     os.path.join(script_dir, "..", "CALCULATORS", "MACE-OFF23_small.model")
 )
 
-xyz_dir = os.path.join(script_dir, "OPTIMISED_STRUCTURES", "SMALL_MODEL")
+xyz_dir = os.path.join(script_dir, "..",  "OPTIMISED_STRUCTURES", "SMALL_MODEL")
 
 # -----------------------------------------------------------------------------
 # UTILITIES

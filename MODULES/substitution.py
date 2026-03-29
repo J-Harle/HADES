@@ -10,7 +10,7 @@ RDLogger.DisableLog('rdApp.*')
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 txt_path = os.path.join(script_dir, "SUBSTITUTION")
-output_csv = os.path.join(script_dir, "..", "hades_test_out.csv")
+output_csv = os.path.join(script_dir, "..", "hades_out.csv")
 
 
 def read_data_files(txt_path):
@@ -222,7 +222,7 @@ def write_to_csv(data, output_csv):
 
 
 if __name__ == "__main__":
-    iteration_count = 1000
+    iteration_count = 10000
     max_attempts = 5
 
     cores, func_gs, heteroatoms = read_data_files(txt_path)
@@ -243,7 +243,7 @@ if __name__ == "__main__":
         while attempts < max_attempts and not success:
             attempts += 1
             current_smiles = core_smiles
-            substitution_count = random.randint(1, 2)
+            substitution_count = random.randint(1, 4)
             success = True
 
             # print(f"\n=== Attempt {attempts}: performing {substitution_count} substitutions ===")
