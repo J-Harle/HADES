@@ -55,10 +55,13 @@ torch.set_num_interop_threads(1)
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
 calc_dir = os.path.abspath(
-    os.path.join(script_dir, "..", "CALCULATORS", "MACE-OFF23_small.model")
+    os.path.join(script_dir, "CALCULATORS", "MACE-OFF23_small.model")
 )
 
-xyz_dir = os.path.join(script_dir, "..",  "OPTIMISED_STRUCTURES", "SMALL_MODEL")
+#xyz_dir = os.path.join(script_dir, "..",  "OPTIMISED_STRUCTURES", "30_MOL")
+xyz_dir = os.path.join(script_dir, "..",  "OPTIMISED_STRUCTURES", "LARGE_DATASET")
+#xyz_dir = os.path.join(script_dir, "..", "OPTIMISED_STRUCTURES", "SMALL_MODEL", "ALKYL")
+print(xyz_dir)
 
 # -----------------------------------------------------------------------------
 # UTILITIES
@@ -165,7 +168,7 @@ def process_xyz(xyz_path):
 # -----------------------------------------------------------------------------
 # PARALLEL DRIVER
 # -----------------------------------------------------------------------------
-def calc_vibrations_parallel(ncores=8):
+def calc_vibrations_parallel(ncores=None):
     xyz_files = []
 
     for root, _, files in os.walk(xyz_dir):
@@ -192,4 +195,4 @@ def calc_vibrations_parallel(ncores=8):
 # ENTRY POINT
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
-    calc_vibrations_parallel(ncores=8)
+    calc_vibrations_parallel(ncores=80)

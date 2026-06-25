@@ -15,7 +15,7 @@ parser = argparse.ArgumentParser(
     description="Calculate oxygen balance from SMILES CSV"
 )
 parser.add_argument(
-    "--input", "-i", type=str, default="hades_out.csv",
+    "--input", "-i", type=str, default="large_data.csv",#"hades_out.csv",
     help="Input CSV with CID and SMILES columns (default: hades_out.csv)"
 )
 parser.add_argument(

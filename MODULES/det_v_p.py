@@ -4,6 +4,7 @@ import numpy as np
 from rdkit import Chem
 from rdkit.Chem import AllChem, Descriptors
 from collections import Counter
+from tqdm import tqdm
 
 def read_csv(csv_path):
     data = []
@@ -211,16 +212,16 @@ def write_to_csv(csv_path, results):
         "density / gcm-3",
         "det_velocity / kms-1",
         "det_pressure / Gpa",
-        "N",
-        "M",
+        # "N",
+        # "M",
         "Q",
-        "phi",
-        "eod",
-        "CO2",
-        "N2",
-        "H2O",
-        "C",
-        "mw",
+        # "phi",
+        # "eod",
+        # "CO2",
+        # "N2",
+        # "H2O",
+        # "C",
+        # "mw",
     ]
     for field in new_fields:
         if field not in fieldnames:
@@ -238,18 +239,18 @@ def write_to_csv(csv_path, results):
             row["det_pressure / Gpa"] = mol.get("p")
 
             ###########
-            row["N"] = mol.get("N")
-            row["M"] = mol.get("M")
+            # row["N"] = mol.get("N")
+            # row["M"] = mol.get("M")
             row["Q"] = mol.get("Q")
-            row["phi"] = mol.get("phi")
-            row["eod"] = mol.get("eod")
+            # row["phi"] = mol.get("phi")
+            # row["eod"] = mol.get("eod")
             
-            products = mol.get("products", {})
-            row["CO2"] = products.get("CO2")
-            row["N2"] = products.get("N2")
-            row["H2O"] = products.get("H2O")
-            row["C"] = products.get("C")
-            row["mw"] = products.get("mw")
+            # products = mol.get("products", {})
+            # row["CO2"] = products.get("CO2")
+            # row["N2"] = products.get("N2")
+            # row["H2O"] = products.get("H2O")
+            # row["C"] = products.get("C")
+            # row["mw"] = products.get("mw")
 
     with open(csv_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -260,17 +261,20 @@ def write_to_csv(csv_path, results):
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
 
-    # csv_path = os.path.join(script_dir, "..", "hades_out.csv")
-    # xyz_dir = os.path.join(script_dir, "..", "OPTIMISED_STRUCTURES", "SMALL_MODEL")
+    csv_path = os.path.join(script_dir, "..", "large_data.csv")
+    xyz_dir = os.path.join(script_dir, "..", "OPTIMISED_STRUCTURES", "LARGE_DATASET")
 
-    csv_path = os.path.join(script_dir, "..", "30_bench.csv")
-    xyz_dir = os.path.join(script_dir, "..", "OPTIMISED_STRUCTURES", "30_MOL")
+    # csv_path = os.path.join(script_dir, "..", "30_bench.csv")
+    # xyz_dir = os.path.join(script_dir, "..", "OPTIMISED_STRUCTURES", "30_MOL")
+
+    # csv_path = os.path.join(script_dir, "..", "bak_30_bench.csv")
+    # xyz_dir = os.path.join(script_dir, "..", "OPTIMISED_STRUCTURES", "DET_V_P_TEST")
 
     data = read_csv(csv_path)
 
     results = []
 
-    for mol in data:
+    for mol in tqdm(data, desc="Processing molecules"):
         cid = mol["cid"]
         xyz_path = os.path.join(xyz_dir, f"{cid}", f"{cid}.xyz")
 
