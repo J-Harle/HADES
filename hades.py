@@ -31,7 +31,6 @@ parser.add_argument(
     help="Output file path (default: hades_out.csv)"
 )
 
-# Workflow stages (boolean flags)
 parser.add_argument(
     "--generate", "-g", action="store_true",
     help="Generate new molecules"
