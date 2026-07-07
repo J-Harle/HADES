@@ -1,14 +1,32 @@
+"""
+Generate substituted molecules for the HADES workflow.
+
+This script reads molecular cores, functional groups, and heteroatom fragments
+from text files, randomly substitutes cores with those groups, filters duplicate
+molecules using canonical SMILES, calculates synthetic accessibility scores, and
+writes the generated molecules to a CSV file.
+"""
+
 import os
 import random
 import re
 import csv
+import argparse
 from rdkit import Chem
 from rdkit import RDLogger
 from rdkit.Contrib.SA_Score import sascorer
 from tqdm import tqdm
-import argparse
+
 
 def parse_args():
+    """Parse command-line arguments.
+
+    Returns
+    -------
+    argparse.Namespace
+        Parsed command-line arguments containing the input path, output CSV path,
+        and requested number of molecules.
+    """
     parser = argparse.ArgumentParser(
         description="Generate substituted molecules for HADES"
     )
@@ -40,15 +58,31 @@ def parse_args():
 RDLogger.DisableLog("rdApp.*")
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
-txt_path = os.path.join(script_dir, "..", "MODULES","SUBSTITUTION")
-# output_csv = os.path.join(script_dir, "..", "test_hades_out.csv")
+txt_path = os.path.join(script_dir, "..", "MODULES", "SUBSTITUTION")
 
 
-# =========================================================
 # READ INPUT FILES
-# =========================================================
-
 def read_data_files(txt_path):
+    """Read molecular cores, functional groups, and heteroatoms from text files.
+
+    The expected files are `cores.txt`, `functional_groups.txt`, and
+    `heteroatoms.txt`. Each valid line should have the format:
+
+    `name: SMILES`
+
+    Blank lines and lines starting with `#` are ignored.
+
+    Parameters
+    ----------
+    txt_path : str
+        Directory containing the substitution input text files.
+
+    Returns
+    -------
+    tuple[list[tuple[str, str]], list[tuple[str, str]], list[tuple[str, str]]]
+        Tuple containing lists of core molecules, functional groups, and
+        heteroatom fragments. Each entry is stored as `(name, smiles)`.
+    """
     cores = []
     func_gs = []
     heteroatoms = []
@@ -104,19 +138,26 @@ def read_data_files(txt_path):
     return cores, func_gs, heteroatoms
 
 
-# =========================================================
 # CANONICAL SMILES FOR DUPLICATE CHECKING
-# =========================================================
 
 def canonicalise_smiles(smiles):
-    """
-    Converts a SMILES string into a canonical RDKit SMILES.
+    """Convert a SMILES string into a canonical RDKit SMILES.
 
     This is used for duplicate checking. Different non-canonical SMILES
     representations of the same molecule should produce the same canonical
     SMILES.
-    """
 
+    Parameters
+    ----------
+    smiles : str
+        Input SMILES string.
+
+    Returns
+    -------
+    str or None
+        Canonical SMILES string if successful. Returns None if the molecule
+        cannot be parsed or sanitised.
+    """
     mol = Chem.MolFromSmiles(smiles)
 
     if mol is None:
@@ -138,19 +179,24 @@ def canonicalise_smiles(smiles):
         return None
 
 
-# =========================================================
 # SYNTHETIC ACCESSIBILITY SCORE
-# =========================================================
-
 def calculate_sascore(smiles):
-    """
-    Calculates the RDKit synthetic accessibility score.
+    """Calculate the RDKit synthetic accessibility score.
 
-    Lower values are generally easier to synthesise.
-    Higher values are generally harder to synthesise.
-    The usual range is approximately 1 to 10.
-    """
+    Lower values are generally easier to synthesise. Higher values are generally
+    harder to synthesise. The usual range is approximately 1 to 10.
 
+    Parameters
+    ----------
+    smiles : str
+        Input SMILES string.
+
+    Returns
+    -------
+    float or None
+        Synthetic accessibility score if successful. Returns None if the
+        molecule cannot be parsed, sanitised, or scored.
+    """
     mol = Chem.MolFromSmiles(smiles)
 
     if mol is None:
@@ -165,11 +211,29 @@ def calculate_sascore(smiles):
         return None
 
 
-# =========================================================
 # MARK CORE ATOMS WITH WILDCARDS
-# =========================================================
-
 def mark_core_atoms(core_smiles, num_sites, max_attempts=10):
+    """Add wildcard attachment points to random heavy atoms in a core molecule.
+
+    The function randomly selects heavy atoms in the input molecule and attaches
+    dummy atoms, represented as wildcard atoms, to create substitution sites.
+
+    Parameters
+    ----------
+    core_smiles : str
+        SMILES string for the core molecule.
+    num_sites : int
+        Number of substitution sites to add.
+    max_attempts : int, optional
+        Maximum number of attempts to generate a valid marked molecule.
+        Default is 10.
+
+    Returns
+    -------
+    str or None
+        SMILES string containing wildcard attachment sites if successful.
+        Returns None if marking fails.
+    """
     attempt = 0
 
     while attempt < max_attempts:
@@ -210,7 +274,7 @@ def mark_core_atoms(core_smiles, num_sites, max_attempts=10):
 
             smiles_noH = Chem.MolToSmiles(mol_no_H, canonical=False)
 
-            # Convert bare * into (*) for consistency
+            # Convert bare * into (*) for consistency.
             smiles_noH = re.sub(r"(?<!\()\*(?!\))", "(*)", smiles_noH)
 
             return smiles_noH
@@ -221,11 +285,28 @@ def mark_core_atoms(core_smiles, num_sites, max_attempts=10):
     return None
 
 
-# =========================================================
 # SUBSTITUTE WILDCARDS
-# =========================================================
-
 def substitute_wildcards_rdkit(core_smiles, func_groups):
+    """Replace wildcard atoms in a molecule with random substituents.
+
+    Each wildcard atom in the core molecule is replaced with a randomly chosen
+    functional group or heteroatom fragment. Functional groups must themselves
+    contain a wildcard atom defining their attachment point.
+
+    Parameters
+    ----------
+    core_smiles : str
+        SMILES string containing one or more wildcard atoms.
+    func_groups : list[tuple[str, str]]
+        Available substituents stored as `(name, smiles)` pairs.
+
+    Returns
+    -------
+    tuple[str or None, list[str] or None]
+        Final substituted SMILES string and list of attached substituent names.
+        Returns `(None, None)` if the input molecule has no valid wildcard atoms.
+        Returns `(None, attached_names)` if final sanitisation fails.
+    """
     mol = Chem.MolFromSmiles(core_smiles)
 
     if mol is None:
@@ -247,8 +328,7 @@ def substitute_wildcards_rdkit(core_smiles, func_groups):
     for dummy_idx in sorted(dummy_atoms, reverse=True):
         name, fg_smiles = random.choice(func_groups)
 
-        # Try original functional group SMILES first,
-        # then uppercase as a fallback.
+        # Try original functional group SMILES first, then uppercase as a fallback.
         for attempt in [fg_smiles, fg_smiles.upper()]:
             fg_mol = Chem.MolFromSmiles(attempt)
 
@@ -274,12 +354,16 @@ def substitute_wildcards_rdkit(core_smiles, func_groups):
 
             core_neighs = [
                 neighbour.GetIdx()
-                for neighbour in combo_rw.GetAtomWithIdx(dummy_idx).GetNeighbors()
+                for neighbour in combo_rw.GetAtomWithIdx(
+                    dummy_idx
+                ).GetNeighbors()
             ]
 
             fg_neighs = [
                 fg_offset + neighbour.GetIdx()
-                for neighbour in fg_mol.GetAtomWithIdx(fg_dummy_idx).GetNeighbors()
+                for neighbour in fg_mol.GetAtomWithIdx(
+                    fg_dummy_idx
+                ).GetNeighbors()
             ]
 
             for c_idx in core_neighs:
@@ -321,11 +405,23 @@ def substitute_wildcards_rdkit(core_smiles, func_groups):
         return None, attached_names
 
 
-# =========================================================
 # WRITE OUTPUT CSV
-# =========================================================
-
 def write_to_csv(data, output_csv):
+    """Write generated molecule data to a CSV file.
+
+    The output contains one row per generated molecule and dynamically adds
+    substitution columns according to the largest number of substitutions found
+    in the generated dataset.
+
+    Parameters
+    ----------
+    data : list[tuple[str, str, str, float, list[str]]]
+        Generated molecule data. Each row should contain the CID, core name,
+        canonical SMILES, synthetic accessibility score, and list of
+        substitutions.
+    output_csv : str
+        Path to the output CSV file.
+    """
     max_subs = max(len(row[4]) for row in data)
 
     headers = (
@@ -352,20 +448,13 @@ def write_to_csv(data, output_csv):
     print(f"\nSaved {len(data)} unique molecules to {output_csv}")
 
 
-# =========================================================
 # MAIN GENERATION LOOP
-# =========================================================
-
-if __name__ == "__main__":
+def main():
+    
     args = parse_args()
-
-    # Unique number of molecules to generate
     iteration_count = args.num_molecules
-
-    # Output CSV path from command line
     output_csv = args.output
 
-    # Number of times to retry generating a valid molecule
     max_attempts = 5
     max_total_attempts = iteration_count * 500
 
@@ -398,17 +487,13 @@ if __name__ == "__main__":
         total_attempts += 1
 
         if total_attempts > max_total_attempts:
-            print(
-                f"\nStopped after {max_total_attempts} total attempts."
-            )
+            print(f"\nStopped after {max_total_attempts} total attempts.")
             print(
                 f"Requested {iteration_count} unique molecules, "
-                f"but only generated {generated_unique}."
-            )
+                f"but only generated {generated_unique}.")
             print(
                 "This probably means the generator is now producing mostly "
-                "duplicates, or the accessible chemical space is too small."
-            )
+                "duplicates, or the accessible chemical space is too small.")
             break
 
         core_name, core_smiles = random.choice(cores)
@@ -498,3 +583,7 @@ if __name__ == "__main__":
         write_to_csv(results, output_csv)
     else:
         print("No molecules generated successfully.")
+
+
+if __name__ == "__main__":
+    main()

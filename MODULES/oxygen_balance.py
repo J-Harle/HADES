@@ -1,41 +1,25 @@
+"""
+Calculate oxygen balance values from a SMILES-containing CSV file.
+
+This script reads a CSV file containing a `SMILES` column, calculates the oxygen
+balance for each molecule using its elemental composition, and writes the values
+back to the same CSV file or to a separate output file.
+"""
+
 import csv
 import os
 import argparse
 from collections import Counter
+
 from rdkit import Chem
 from rdkit import RDLogger
 from tqdm import tqdm
 
+
 RDLogger.DisableLog("rdApp.*")
 
 
-# -------------------------
-# CLI
-# -------------------------
-parser = argparse.ArgumentParser(
-    description="Calculate oxygen balance from a SMILES CSV"
-)
-
-parser.add_argument(
-    "--input", "-i",
-    type=str,
-    default="hades_out.csv",
-    help="Input CSV containing a SMILES column. Default: hades_out.csv"
-)
-
-parser.add_argument(
-    "--output", "-o",
-    type=str,
-    default=None,
-    help="Output CSV. Default: overwrite input CSV"
-)
-
-args = parser.parse_args()
-
-
-# -------------------------
 # Constants
-# -------------------------
 ATOMIC_WEIGHTS = {
     "H": 1.008,
     "C": 12.011,
@@ -44,24 +28,81 @@ ATOMIC_WEIGHTS = {
 }
 
 
-# -------------------------
-# Path handling
-# -------------------------
-def resolve_path(path):
-    """
-    Converts a user-provided path into an absolute path.
+# CLI
+def parse_args():
+    """Parse command-line arguments.
 
-    Examples:
-        -i hades_out.csv              -> /current/working/dir/hades_out.csv
-        -i /full/path/hades_out.csv   -> /full/path/hades_out.csv
+    Returns
+    -------
+    argparse.Namespace
+        Parsed command-line arguments containing the input CSV path and optional
+        output CSV path.
+    """
+    parser = argparse.ArgumentParser(
+        description="Calculate oxygen balance from a SMILES CSV"
+    )
+
+    parser.add_argument(
+        "--input", "-i",
+        type=str,
+        default="hades_out.csv",
+        help="Input CSV containing a SMILES column. Default: hades_out.csv"
+    )
+
+    parser.add_argument(
+        "--output", "-o",
+        type=str,
+        default=None,
+        help="Output CSV. Default: overwrite input CSV"
+    )
+
+    return parser.parse_args()
+
+
+# Path handling
+def resolve_path(path):
+    """Convert a user-provided path into an absolute path.
+
+    Parameters
+    ----------
+    path : str
+        Input file or directory path.
+
+    Returns
+    -------
+    str
+        Absolute version of the input path.
     """
     return os.path.abspath(path)
 
 
-# -------------------------
 # Chemistry helpers
-# -------------------------
 def oxygen_balance(C, H, O, mol_weight):
+    """Calculate the oxygen balance of a molecule.
+
+    The oxygen balance is calculated using:
+
+    OB% = (-1600 / molecular weight) * (2C + H/2 - O)
+
+    where C, H, and O are the number of carbon, hydrogen, and oxygen atoms in
+    the molecule.
+
+    Parameters
+    ----------
+    C : int
+        Number of carbon atoms.
+    H : int
+        Number of hydrogen atoms.
+    O : int
+        Number of oxygen atoms.
+    mol_weight : float
+        Molecular weight of the molecule in g mol-1.
+
+    Returns
+    -------
+    float or None
+        Oxygen balance percentage. Returns None if the molecular weight is zero.
+    """
     if mol_weight == 0:
         return None
 
@@ -69,6 +110,22 @@ def oxygen_balance(C, H, O, mol_weight):
 
 
 def atom_counts_from_smiles(smiles):
+    """Count atoms in a molecule from a SMILES string.
+
+    Explicit hydrogens are added before counting so that hydrogen atoms are
+    included in the final elemental composition.
+
+    Parameters
+    ----------
+    smiles : str
+        Input SMILES string.
+
+    Returns
+    -------
+    collections.Counter or None
+        Counter containing atom symbols and their counts. Returns None if the
+        SMILES string cannot be parsed by RDKit.
+    """
     mol = Chem.MolFromSmiles(smiles)
 
     if mol is None:
@@ -79,10 +136,10 @@ def atom_counts_from_smiles(smiles):
     return Counter(atom.GetSymbol() for atom in mol.GetAtoms())
 
 
-# -------------------------
 # Main logic
-# -------------------------
-def main():
+if __name__ == "__main__":
+
+    args = parse_args()
     input_csv = resolve_path(args.input)
 
     if args.output is None:
@@ -105,7 +162,6 @@ def main():
 
     fieldnames = list(rows[0].keys())
 
-    # Only SMILES is actually required for oxygen balance
     required = {"SMILES"}
     missing = required - set(fieldnames)
 
@@ -159,5 +215,4 @@ def main():
     print(f"\nUpdated CSV written to: {output_csv}")
 
 
-if __name__ == "__main__":
-    main()
+

@@ -1,3 +1,15 @@
+"""
+Optimise molecules using MACE and write thermochemistry outputs.
+
+This script reads a CSV file containing `CID` and `SMILES` columns, generates
+initial 3D structures with RDKit, optimises the structures using MACE through
+ASE, calculates vibrational thermochemistry, and writes optimised XYZ,
+thermochemistry, and Hessian files.
+
+Each molecule is written to its own subdirectory inside the requested output
+directory.
+"""
+
 import os
 import sys
 import warnings
@@ -6,10 +18,16 @@ import urllib.request
 import pandas as pd
 import argparse
 
-# -----------------------------------------------------------------------------
 # ARGPARSE
-# -----------------------------------------------------------------------------
 def parse_args():
+    """Parse command-line arguments.
+
+    Returns
+    -------
+    argparse.Namespace
+        Parsed command-line arguments containing the input CSV path, requested
+        CPU count, and output directory.
+    """
     parser = argparse.ArgumentParser(
         description="Optimise molecules using MACE"
     )
@@ -39,6 +57,24 @@ def parse_args():
 
 
 def resolve_ncores(cpus):
+    """Resolve the number of worker processes to use.
+
+    Parameters
+    ----------
+    cpus : int
+        Requested CPU count. A value of -1 means use all available logical
+        cores.
+
+    Returns
+    -------
+    int
+        Number of worker processes to use.
+
+    Raises
+    ------
+    ValueError
+        If `cpus` is less than 1 and is not equal to -1.
+    """
     if cpus == -1:
         return os.cpu_count() or 1
 
@@ -57,20 +93,21 @@ def resolve_ncores(cpus):
     return cpus
 
 
-# -----------------------------------------------------------------------------
 # ENVIRONMENT VARIABLES
-# -----------------------------------------------------------------------------
 os.environ["TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"] = "0"
 os.environ["E3NN_NO_CUEQUIV"] = "1"
 
 warnings.simplefilter("ignore", UserWarning)
 warnings.simplefilter("ignore", FutureWarning)
 
-# -----------------------------------------------------------------------------
 # SUPPRESS OUTPUT
-# -----------------------------------------------------------------------------
 @contextlib.contextmanager
 def suppress_output():
+    """Temporarily suppress stdout and stderr.
+
+    This is mainly used to silence verbose output from Torch, MACE, ASE, and
+    RDKit during imports, calculator creation, and optimisation setup.
+    """
     with open(os.devnull, "w") as devnull:
         old_stdout = sys.stdout
         old_stderr = sys.stderr
@@ -82,9 +119,7 @@ def suppress_output():
             sys.stdout = old_stdout
             sys.stderr = old_stderr
 
-# -----------------------------------------------------------------------------
 # IMPORTS (SUPPRESSED)
-# -----------------------------------------------------------------------------
 with suppress_output():
     import torch
     from mace.calculators import MACECalculator
@@ -102,18 +137,53 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 torch.set_num_threads(1)
 torch.set_num_interop_threads(1)
 
-# -----------------------------------------------------------------------------
 # CSV
-# -----------------------------------------------------------------------------
 def read_csv(filename):
+    """Read the input CSV and return CID and SMILES columns.
+
+    Column names are stripped and converted to uppercase before selecting the
+    required columns.
+
+    Parameters
+    ----------
+    filename : str
+        Path to the input CSV file.
+
+    Returns
+    -------
+    pandas.DataFrame
+        DataFrame containing only the `CID` and `SMILES` columns.
+
+    Raises
+    ------
+    KeyError
+        If the input CSV does not contain `CID` and `SMILES` columns.
+    """
     df = pd.read_csv(filename)
     df.columns = [c.strip().upper() for c in df.columns]
     return df[["CID", "SMILES"]]
 
-# -----------------------------------------------------------------------------
 # RDKit → ASE
-# -----------------------------------------------------------------------------
 def create_ase_objs(smiles_list, max_attempts=10):
+    """Generate ASE atoms objects from a list of SMILES strings.
+
+    RDKit is used to add hydrogens and generate 3D conformers using ETKDG.
+    Successful RDKit structures are converted to ASE atoms objects through an
+    XYZ block.
+
+    Parameters
+    ----------
+    smiles_list : list[str]
+        List of SMILES strings to convert.
+    max_attempts : int, optional
+        Maximum number of RDKit embedding attempts per molecule. Default is 10.
+
+    Returns
+    -------
+    list[ase.Atoms or None]
+        List of ASE atoms objects. Entries are None when conformer generation
+        fails.
+    """
     atoms_list = []
     for smiles in smiles_list:
         mol = Chem.MolFromSmiles(smiles)
@@ -135,10 +205,19 @@ def create_ase_objs(smiles_list, max_attempts=10):
 
     return atoms_list
 
-# -----------------------------------------------------------------------------
 # MACE
-# -----------------------------------------------------------------------------
 def get_mace_calculator():
+    """Create a MACE calculator, downloading the model if needed.
+
+    The MACE-OFF23 small model is stored in a local `CALCULATORS` directory
+    relative to the current working directory. If the model file is not present,
+    it is downloaded automatically.
+
+    Returns
+    -------
+    MACECalculator
+        Configured MACE calculator using CPU and float64 precision.
+    """
     parent_dir = os.getcwd()
     calc_dir = os.path.join(parent_dir, "CALCULATORS")
     os.makedirs(calc_dir, exist_ok=True)
@@ -161,10 +240,25 @@ def get_mace_calculator():
         )
     return calc
 
-# -----------------------------------------------------------------------------
 # WORKER
-# -----------------------------------------------------------------------------
 def optimise_and_write_single(args):
+    """Optimise one molecule and write its output files.
+
+    This function is designed to run inside a worker process. It assigns a MACE
+    calculator, performs a geometry optimisation, calculates a single-point
+    energy, attempts vibrational thermochemistry, writes the Hessian, writes the
+    optimised XYZ structure, and writes a thermochemistry summary.
+
+    Parameters
+    ----------
+    args : tuple
+        Tuple containing `(atoms, smiles, mol_id, base_dir)`.
+
+    Returns
+    -------
+    tuple[str, str]
+        Molecule ID and path to the written XYZ file.
+    """
     atoms, smiles, mol_id, base_dir = args
 
     optimised_dir = os.path.abspath(base_dir)
@@ -177,21 +271,21 @@ def optimise_and_write_single(args):
     mol_dir = os.path.join(optimised_dir, str(mol_id))
     os.makedirs(mol_dir, exist_ok=True)
 
-    # ---------------- OPTIMISATION ----------------
+    # OPTIMISATION 
     dyn = BFGS(atoms, logfile=os.path.join(mol_dir, f"{mol_id}.log"))
     dyn.run(fmax=0.001)
 
-    # ---------------- SPE ----------------
+    # SPE
     spe = atoms.get_potential_energy()
 
-    # ---------------- THERMO ----------------
+    # THERMO
     thermo_success = True
     try:
         vib_dir = os.path.join(mol_dir, "vib")
         vib = Vibrations(atoms, name=os.path.join(vib_dir, "vib"))
         vib.run()
 
-        # ---------------- HESSIAN ----------------
+        # HESSIAN
         hessian = vib.get_vibrations().get_hessian()
 
         natoms = len(atoms)
@@ -230,7 +324,7 @@ def optimise_and_write_single(args):
         print(f"[THERMO FAILED] {mol_id}: {e}")
         thermo_success = False
 
-    # ---------------- WRITE XYZ ----------------
+    # WRITE XYZ 
     xyz_path = os.path.join(mol_dir, f"{mol_id}.xyz")
     with open(xyz_path, "w") as f:
         f.write(f"{len(atoms)}\n")
@@ -238,7 +332,7 @@ def optimise_and_write_single(args):
         for s, (x, y, z) in zip(atoms.get_chemical_symbols(), atoms.get_positions()):
             f.write(f"{s:2} {x:12.6f} {y:12.6f} {z:12.6f}\n")
 
-    # ---------------- WRITE THERMO ----------------
+    # WRITE THERMO
     if thermo_success:
         thermo_path = os.path.join(mol_dir, f"{mol_id}_thermo.txt")
         with open(thermo_path, "w") as f:
@@ -257,9 +351,7 @@ def optimise_and_write_single(args):
     del atoms.calc
     return mol_id, xyz_path
 
-# -----------------------------------------------------------------------------
 # PARALLEL DRIVER
-# -----------------------------------------------------------------------------
 def optimise_and_write_parallel(
     atoms_list,
     smiles_list,
@@ -267,7 +359,29 @@ def optimise_and_write_parallel(
     base_dir,
     ncores=None
 ):
+    """Optimise and write multiple molecules in parallel.
 
+        Molecules with failed RDKit conformer generation, represented by None in
+        `atoms_list`, are skipped.
+
+        Parameters
+        ----------
+        atoms_list : list[ase.Atoms or None]
+            ASE atoms objects to optimise.
+        smiles_list : list[str]
+            SMILES strings corresponding to the atoms objects.
+        id_list : list[str]
+            Molecule identifiers corresponding to the atoms objects.
+        base_dir : str
+            Directory where molecule subdirectories should be written.
+        ncores : int or None, optional
+            Number of worker processes to use.
+
+        Returns
+        -------
+        list[tuple[str, str]]
+            List of molecule IDs and written XYZ file paths.
+        """
     tasks = [
         (atoms, smiles, mol_id, base_dir)
         for atoms, smiles, mol_id in zip(atoms_list, smiles_list, id_list)
@@ -289,9 +403,7 @@ def optimise_and_write_parallel(
 
     return results
 
-# -----------------------------------------------------------------------------
 # MAIN
-# -----------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
 

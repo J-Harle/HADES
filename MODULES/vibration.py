@@ -1,3 +1,14 @@
+"""
+Calculate MACE vibrational frequencies and eigenvectors for XYZ files.
+
+This script searches a directory tree for optimised XYZ structures, assigns a
+MACE calculator to each structure, runs ASE vibrational analysis, and writes
+eigenvector and Jmol-compatible output files for each molecule.
+
+The script supports multiprocessing and is intended to be called either directly
+or through the main HADES workflow.
+"""
+
 import os
 import sys
 import argparse
@@ -10,24 +21,25 @@ import ase.io
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from ase.vibrations import Vibrations
 
-# -----------------------------------------------------------------------------
+
 # ENVIRONMENT VARIABLES (MUST BE SET BEFORE TORCH / MACE IMPORT)
-# -----------------------------------------------------------------------------
 os.environ["TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"] = "0"
 os.environ["E3NN_NO_CUEQUIV"] = "1"
 
-# -----------------------------------------------------------------------------
+
 # GLOBAL WARNING SUPPRESSION
-# -----------------------------------------------------------------------------
 warnings.simplefilter("ignore", UserWarning)
 warnings.simplefilter("ignore", FutureWarning)
 
 
-# -----------------------------------------------------------------------------
 # SUPPRESS STDOUT / STDERR CONTEXT MANAGER
-# -----------------------------------------------------------------------------
 @contextlib.contextmanager
 def suppress_output():
+    """Temporarily suppress stdout and stderr.
+
+    This is mainly used to silence verbose output from Torch, MACE, and ASE
+    calculator initialisation.
+    """
     with open(os.devnull, "w") as devnull:
         old_stdout = sys.stdout
         old_stderr = sys.stderr
@@ -40,21 +52,18 @@ def suppress_output():
             sys.stderr = old_stderr
 
 
-# -----------------------------------------------------------------------------
 # IMPORT TORCH / MACE WITH OUTPUT SUPPRESSED
-# -----------------------------------------------------------------------------
 with suppress_output():
     import torch
     from mace.calculators import MACECalculator
+
 
 # Limit torch threading. Important for multiprocessing.
 torch.set_num_threads(1)
 torch.set_num_interop_threads(1)
 
 
-# -----------------------------------------------------------------------------
 # CLI
-# -----------------------------------------------------------------------------
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
 default_model_path = os.path.join(
@@ -103,10 +112,20 @@ parser.add_argument(
 args = parser.parse_args()
 
 
-# -----------------------------------------------------------------------------
 # PATH HANDLING
-# -----------------------------------------------------------------------------
 def resolve_path(path):
+    """Return the absolute path for a given file or directory path.
+
+    Parameters
+    ----------
+    path : str
+        Input path to resolve.
+
+    Returns
+    -------
+    str
+        Absolute version of the input path.
+    """
     return os.path.abspath(path)
 
 
@@ -115,6 +134,24 @@ xyz_dir = resolve_path(args.outdir)
 
 
 def resolve_ncores(cpus):
+    """Resolve the requested number of worker processes.
+
+    Parameters
+    ----------
+    cpus : int
+        Number of CPUs requested from the command line. A value of -1 means use
+        all available logical cores.
+
+    Returns
+    -------
+    int
+        Number of worker processes to use.
+
+    Raises
+    ------
+    ValueError
+        If `cpus` is less than 1 and is not equal to -1.
+    """
     if cpus == -1:
         return os.cpu_count() or 1
 
@@ -124,11 +161,20 @@ def resolve_ncores(cpus):
     return cpus
 
 
-# -----------------------------------------------------------------------------
 # UTILITIES
-# -----------------------------------------------------------------------------
 def file_md5(path):
-    """Compute MD5 hash of a file for model verification."""
+    """Calculate the MD5 hash of a file.
+
+    Parameters
+    ----------
+    path : str
+        Path to the file to hash.
+
+    Returns
+    -------
+    str
+        MD5 hash string for the file.
+    """
     h = hashlib.md5()
 
     with open(path, "rb") as f:
@@ -139,7 +185,21 @@ def file_md5(path):
 
 
 def calculator(model_path):
-    """Initialise MACE calculator. Must be called inside each process."""
+    """Create and return a MACE calculator.
+
+    The calculator must be initialised inside each worker process rather than
+    shared between processes.
+
+    Parameters
+    ----------
+    model_path : str
+        Path to the MACE model file.
+
+    Returns
+    -------
+    MACECalculator
+        Configured MACE calculator using CPU and float64 precision.
+    """
     with suppress_output():
         return MACECalculator(
             model_path=model_path,
@@ -149,11 +209,24 @@ def calculator(model_path):
         )
 
 
-# -----------------------------------------------------------------------------
 # CORE WORKER
-# -----------------------------------------------------------------------------
 def process_xyz(xyz_path):
-    """Run vibrational analysis on a single XYZ file."""
+    """Run vibrational analysis for a single XYZ structure.
+
+    This function reads an XYZ file, attaches a MACE calculator, runs ASE
+    vibrational analysis, writes eigenvectors, writes a Jmol-compatible XYZ file,
+    and removes temporary vibration files.
+
+    Parameters
+    ----------
+    xyz_path : str
+        Path to the input XYZ file.
+
+    Returns
+    -------
+    tuple[str, str]
+        Tuple containing the processed XYZ filename or path and a status message.
+    """
     try:
         xyz_file = os.path.basename(xyz_path)
         root = os.path.dirname(xyz_path)
@@ -177,9 +250,7 @@ def process_xyz(xyz_path):
         vib = Vibrations(atoms, name=vib_dir)
         vib.run()
 
-        # ---------------------------------------------------------------------
         # Frequencies and eigenvectors
-        # ---------------------------------------------------------------------
         frequencies = vib.get_frequencies()
         modes = [vib.get_mode(i) for i in range(len(frequencies))]
 
@@ -205,9 +276,7 @@ def process_xyz(xyz_path):
                         f"{vec[0]:.6f}, {vec[1]:.6f}, {vec[2]:.6f}\n"
                     )
 
-        # ---------------------------------------------------------------------
         # JMOL FILE
-        # ---------------------------------------------------------------------
         jmol_path = os.path.join(
             root,
             f"{mol_name}_jmol.xyz"
@@ -216,9 +285,7 @@ def process_xyz(xyz_path):
         vib_data = vib.get_vibrations()
         vib_data.write_jmol(jmol_path)
 
-        # ---------------------------------------------------------------------
         # CLEANUP
-        # ---------------------------------------------------------------------
         vib.clean()
 
         if os.path.isdir(vib_dir):
@@ -234,10 +301,26 @@ def process_xyz(xyz_path):
         return xyz_path, f"failed: {e}"
 
 
-# -----------------------------------------------------------------------------
 # PARALLEL DRIVER
-# -----------------------------------------------------------------------------
 def calc_vibrations_parallel(ncores):
+    """Run vibrational analysis for all XYZ files in parallel.
+
+    The function recursively searches the configured XYZ directory for `.xyz`
+    files, checks that the requested model and input directory exist, and then
+    distributes each vibration calculation across a process pool.
+
+    Parameters
+    ----------
+    ncores : int
+        Number of worker processes to use.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the requested MACE model file does not exist.
+    NotADirectoryError
+        If the requested XYZ directory does not exist.
+    """
     xyz_files = []
 
     for root, _, files in os.walk(xyz_dir):
@@ -282,13 +365,6 @@ def calc_vibrations_parallel(ncores):
             print(f"{xyz_file}: {status}")
 
 
-# -----------------------------------------------------------------------------
-# ENTRY POINT
-# -----------------------------------------------------------------------------
-def main():
+if __name__ == "__main__":
     ncores = resolve_ncores(args.cpus)
     calc_vibrations_parallel(ncores=ncores)
-
-
-if __name__ == "__main__":
-    main()
