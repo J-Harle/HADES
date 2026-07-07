@@ -26,5 +26,5 @@ Example usage:
 This will generate 5000 molecules and optimise, then perform a frequency calculation and subsequently predict the impact sensitivity of the molecules
 
 ## Todo:
-- For -opt add a choice of MACE model size / program to use (Can only use ASE supported programs)
+- For -opt add a choice of MACE model size / program to use (Can only use ASE supported programs), this will also need to be passed to -eof and -v
 - For all parrallelised modules, add a -cpu command to specify the number of cpus which can be used
