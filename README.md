@@ -26,5 +26,5 @@ Example usage:
 This will generate and optimise a set of molecules, then perform a frequency calculation and subsequently predict the impact sensitivity of the molecules
 
 ## Todo:
-- for --generate, add a cli arg for the number of molecules to be generated
-- 
+- For --generate, add a cli arg for the number of molecules to be generated
+- Add CLI arguement support for each of the modules
