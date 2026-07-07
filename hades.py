@@ -32,9 +32,15 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "--generate", "-g", action="store_true",
-    help="Generate new molecules"
+    "--generate", "-g",
+    nargs="?",
+    const=1000,
+    default=None,
+    type=int,
+    metavar="N",
+    help="Generate N molecules. If -g is used without N, defaults to 1000."
 )
+
 
 parser.add_argument(
     "--optimise-generated", "-opt", action="store_true",
@@ -66,6 +72,25 @@ parser.add_argument(
     help="Calculate generic property information"
 )
 
+parser.add_argument(
+    "--detonation-properties", "-det", action="store_true",
+    help="Calculate detonation property information"
+)
+
+parser.add_argument(
+    "--cpus", "-c",
+    type=int,
+    default=-1,
+    help="Number of CPUs to use for parallel steps. Use -1 for all available cores. Default: -1"
+)
+
+parser.add_argument(
+    "--outdir", "-dir",
+    type=str,
+    default="OPTIMISED_STRUCTURES/HADES",
+    help="Directory where optimised structures should be written. Default: OPTIMISED_STRUCTURES/HADES"
+)
+
 args = parser.parse_args()
 
 # Default output file
@@ -73,9 +98,9 @@ if args.output is None:
     args.output = "hades_out.csv"
 
 # Auto-enable generation if no input file provided
-if args.input is None:
+if args.input is None and args.generate is None:
     print("No input file provided; assuming molecule generation is required.")
-    args.generate = True
+    args.generate = 1000
 
 
 def main():
@@ -84,14 +109,15 @@ def main():
 
     steps = []
 
-    if args.generate:
+    if args.generate is not None:
         steps.append((
-            "Generating molecules",
+            f"Generating {args.generate} molecules",
             [
                 "python",
-                f"{parent_dir}/MODULES/substitution.py",
+                f"{parent_dir}/ARG_MODULES/substitution.py",
                 "-i", args.input or "none",
-                "-o", args.output
+                "-o", args.output,
+                "-n", str(args.generate)
             ]
         ))
 
@@ -100,8 +126,10 @@ def main():
             "Optimising generated molecules",
             [
                 "python",
-                f"{parent_dir}/MODULES/create_object.py",
-                "-i", args.output
+                f"{parent_dir}/ARG_MODULES/create_object.py",
+                "-i", args.output,
+                "--outdir", args.outdir,
+                "-c", str(args.cpus)
             ]
         ))
 
@@ -110,17 +138,17 @@ def main():
             "Calculating vibrations",
             [
                 "python",
-                f"{parent_dir}/MODULES/vibration.py",
+                f"{parent_dir}/ARG_MODULES/vibration.py",
                 "-i", args.output
             ]
         ))
 
     if args.impact_sensitivity:
         steps.append((
-            "Calculating impact sensitivity",
+            "Predicting impact sensitivity",
             [
                 "python",
-                f"{parent_dir}/MODULES/uppumping.py",
+                f"{parent_dir}/ARG_MODULES/uppumping.py",
                 "-i", args.output
             ]
         ))
@@ -130,32 +158,79 @@ def main():
             "Calculating oxygen balance",
             [
                 "python",
-                f"{parent_dir}/MODULES/oxygen_balance.py",
+                f"{parent_dir}/ARG_MODULES/oxygen_balance.py",
                 "-i", args.output
             ]
         ))
 
     if args.enthalpy_of_formation:
+        command = [
+            "python",
+            f"{parent_dir}/ARG_MODULES/isodesmic.py",
+            "-i", args.output,
+            "-dir", args.outdir,
+        ]
+
+        if args.generate is not None:
+            command.extend([
+                "-n", str(args.generate)
+            ])
+
         steps.append((
-            "Calculating enthalpy of formation",
-            [
-                "python",
-                f"{parent_dir}/MODULES/enthalpy_of_formation.py",
-                "-i", args.output
-            ]
+            "Predicting enthalpy of formation",
+            command
         ))
 
     if args.generic_properties:
         steps.append((
-            "Calculating generic properties",
+            "Predicting generic properties",
             [
                 "python",
-                f"{parent_dir}/MODULES/generic_properties.py",
+                f"{parent_dir}/ARG_MODULES/generic_properties.py",
                 "-i", args.output
             ]
         ))
 
+    if args.detonation_properties:
+        steps.append((
+            "Predicting detonation properties",
+            [
+                "python",
+                f"{parent_dir}/ARG_MODULES/test_det_v_p.py",
+                "-i", args.output,
+                "-dir", args.outdir,
+            ]
+        ))
+
     total_steps = len(steps)
+
+    def print_run_plan(steps, args):
+        print("\nHADES run plan")
+        print("-" * 40)
+
+        if args.input:
+            print(f"Input file: {args.input}")
+        else:
+            print("Input file: None")
+
+        print(f"Output file: {args.output}")
+
+        if args.cpus == -1:
+            print("Running on: all available CPU cores")
+        else:
+            print(f"Running on: {args.cpus} CPU cores")
+
+        print("\nSteps to run:")
+
+        if not steps:
+            print("  No steps selected.")
+        else:
+            for i, (description, _) in enumerate(steps, start=1):
+                print(f"  {i}. {description}")
+
+        print("-" * 40)
+
+    print_run_plan(steps, args)
 
     for i, (description, command) in enumerate(steps, start=1):
         print(f"\n[{i}/{total_steps}] {description}...")
