@@ -6,12 +6,42 @@ from rdkit import Chem
 from rdkit import RDLogger
 from rdkit.Contrib.SA_Score import sascorer
 from tqdm import tqdm
+import argparse
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Generate substituted molecules for HADES"
+    )
+
+    parser.add_argument(
+        "--input", "-i",
+        type=str,
+        default=None,
+        help="Optional input file. Currently unused by this generator."
+    )
+
+    parser.add_argument(
+        "--output", "-o",
+        type=str,
+        default="hades_out.csv",
+        help="Output CSV file path"
+    )
+
+    parser.add_argument(
+        "--num-molecules", "-n",
+        type=int,
+        default=1000,
+        help="Number of unique molecules to generate. Default: 1000"
+    )
+
+    return parser.parse_args()
+
 
 RDLogger.DisableLog("rdApp.*")
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
-txt_path = os.path.join(script_dir, "SUBSTITUTION")
-output_csv = os.path.join(script_dir, "..", "test_hades_out.csv")
+txt_path = os.path.join(script_dir, "..", "MODULES","SUBSTITUTION")
+# output_csv = os.path.join(script_dir, "..", "test_hades_out.csv")
 
 
 # =========================================================
@@ -327,8 +357,13 @@ def write_to_csv(data, output_csv):
 # =========================================================
 
 if __name__ == "__main__":
+    args = parse_args()
+
     # Unique number of molecules to generate
-    iteration_count = 1000
+    iteration_count = args.num_molecules
+
+    # Output CSV path from command line
+    output_csv = args.output
 
     # Number of times to retry generating a valid molecule
     max_attempts = 5
@@ -351,8 +386,6 @@ if __name__ == "__main__":
 
     results = []
 
-    # This stores the canonical SMILES of accepted molecules.
-    # Only molecules not already in this set are saved.
     seen_canonical_smiles = set()
 
     pbar = tqdm(
@@ -426,7 +459,6 @@ if __name__ == "__main__":
             failed_count += 1
             continue
 
-        # DUPLICATE CHECK
         if canonical_smiles in seen_canonical_smiles:
             duplicate_count += 1
             continue
@@ -437,7 +469,6 @@ if __name__ == "__main__":
             failed_count += 1
             continue
 
-        # Only unique molecules reach this point.
         seen_canonical_smiles.add(canonical_smiles)
 
         generated_unique += 1
@@ -454,14 +485,6 @@ if __name__ == "__main__":
         )
 
         pbar.update(1)
-
-        # pbar.set_postfix(
-        #     {
-        #         "attempts": total_attempts,
-        #         "duplicates": duplicate_count,
-        #         "failed": failed_count
-        #     }
-        # )
 
     pbar.close()
 

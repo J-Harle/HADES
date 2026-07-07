@@ -1,11 +1,61 @@
 import os
 import sys
-import gc
 import warnings
-import multiprocessing
 import contextlib
 import urllib.request
 import pandas as pd
+import argparse
+
+# -----------------------------------------------------------------------------
+# ARGPARSE
+# -----------------------------------------------------------------------------
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Optimise molecules using MACE"
+    )
+
+    parser.add_argument(
+        "--input", "-i",
+        type=str,
+        required=True,
+        help="Input CSV containing CID and SMILES columns"
+    )
+
+    parser.add_argument(
+        "--cpus", "-c",
+        type=int,
+        default=-1,
+        help="Number of CPUs to use. Use -1 for all available cores. Default: -1"
+    )
+
+    parser.add_argument(
+        "--outdir", "-dir",
+        type=str,
+        default="OPTIMISED_STRUCTURES/HADES",
+        help="Directory where optimised structures should be written. Default: OPTIMISED_STRUCTURES/HADES"
+    )
+
+    return parser.parse_args()
+
+
+def resolve_ncores(cpus):
+    if cpus == -1:
+        return os.cpu_count() or 1
+
+    if cpus < 1:
+        raise ValueError("CPU count must be -1 or a positive integer.")
+
+    available = os.cpu_count() or 1
+
+    if cpus > available:
+        print(
+            f"[WARNING] Requested {cpus} CPUs, but only {available} are available. "
+            f"Using {available}."
+        )
+        return available
+
+    return cpus
+
 
 # -----------------------------------------------------------------------------
 # ENVIRONMENT VARIABLES
@@ -117,8 +167,7 @@ def get_mace_calculator():
 def optimise_and_write_single(args):
     atoms, smiles, mol_id, base_dir = args
 
-    parent_dir = os.getcwd()
-    optimised_dir = os.path.join(parent_dir, base_dir)
+    optimised_dir = os.path.abspath(base_dir)
     os.makedirs(optimised_dir, exist_ok=True)
 
     with suppress_output():
@@ -211,10 +260,13 @@ def optimise_and_write_single(args):
 # -----------------------------------------------------------------------------
 # PARALLEL DRIVER
 # -----------------------------------------------------------------------------
-def optimise_and_write_parallel(atoms_list, smiles_list, id_list,
-                                # base_dir="OPTIMISED_STRUCTURES/SMALL_MODEL/",
-                                base_dir="OPTIMISED_STRUCTURES/30_MOL/",
-                                ncores=None):
+def optimise_and_write_parallel(
+    atoms_list,
+    smiles_list,
+    id_list,
+    base_dir,
+    ncores=None
+):
 
     tasks = [
         (atoms, smiles, mol_id, base_dir)
@@ -241,11 +293,20 @@ def optimise_and_write_parallel(atoms_list, smiles_list, id_list,
 # MAIN
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    # csv_path = os.path.join(script_dir, "MODULES", "Storm_dataset.csv")
-    csv_path = "30_bench.csv"
+    args = parse_args()
 
-	
+    csv_path = args.input
+    ncores = resolve_ncores(args.cpus)
+
+    outdir = os.path.abspath(
+        os.path.join("OPTIMISED_STRUCTURES", args.outdir)
+    )
+
+    print(f"Input CSV: {csv_path}")
+    print(f"Optimised structure directory: {outdir}")
+    print(f"CPUs requested: {args.cpus}")
+    print(f"CPUs used: {ncores}")
+
     df = read_csv(csv_path)
 
     atoms_list = create_ase_objs(df["SMILES"].tolist())
@@ -254,7 +315,8 @@ if __name__ == "__main__":
         atoms_list,
         df["SMILES"].tolist(),
         df["CID"].tolist(),
-        ncores=40
+        base_dir=outdir,
+        ncores=ncores
     )
 
     print("All jobs complete.")

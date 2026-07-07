@@ -174,14 +174,30 @@ def calc_genprop(df):
     return feat_df
 
 
-if __name__ == "__main__":
-    csv_path = args.input
+def main():
+    csv_path = os.path.abspath(args.input)
+
+    print(f"\nInput CSV: {csv_path}")
+
+    if not os.path.isfile(csv_path):
+        raise FileNotFoundError(f"CSV file not found: {csv_path}")
 
     df = read_csv(csv_path)
+
+    if "SMILES" not in df.columns:
+        raise KeyError(
+            f"'SMILES' column not found in {csv_path}. "
+            f"Available columns are: {list(df.columns)}"
+        )
+
     feat_df = calc_genprop(df)
 
     for col in feat_df.columns:
         df[col] = feat_df[col]
 
     df.to_csv(csv_path, index=False)
-    print(f"\nAppended to CSV: {csv_path}")
+    print(f"\nAppended generic properties to CSV: {csv_path}")
+
+
+if __name__ == "__main__":
+    main()

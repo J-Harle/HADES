@@ -8,37 +8,29 @@ from tqdm import tqdm
 
 RDLogger.DisableLog("rdApp.*")
 
+
 # -------------------------
 # CLI
 # -------------------------
 parser = argparse.ArgumentParser(
-    description="Calculate oxygen balance from SMILES CSV"
+    description="Calculate oxygen balance from a SMILES CSV"
 )
+
 parser.add_argument(
-    "--input", "-i", type=str, default="large_data.csv",#"hades_out.csv",
-    help="Input CSV with CID and SMILES columns (default: hades_out.csv)"
+    "--input", "-i",
+    type=str,
+    default="hades_out.csv",
+    help="Input CSV containing a SMILES column. Default: hades_out.csv"
 )
+
 parser.add_argument(
-    "--output", "-o", type=str, default=None,
-    help="Output CSV (default: overwrite input)"
+    "--output", "-o",
+    type=str,
+    default=None,
+    help="Output CSV. Default: overwrite input CSV"
 )
+
 args = parser.parse_args()
-
-# Directory containing this script
-script_dir = os.path.dirname(os.path.abspath(__file__))
-
-# One directory above the script
-parent_dir = os.path.abspath(os.path.join(script_dir, ".."))
-
-# Input CSV path (one directory up)
-input_csv = os.path.join(parent_dir, args.input)
-
-# Output CSV (default: overwrite input)
-output_csv = (
-    os.path.join(parent_dir, args.output)
-    if args.output is not None
-    else input_csv
-)
 
 
 # -------------------------
@@ -51,74 +43,121 @@ ATOMIC_WEIGHTS = {
     "O": 15.999,
 }
 
+
+# -------------------------
+# Path handling
+# -------------------------
+def resolve_path(path):
+    """
+    Converts a user-provided path into an absolute path.
+
+    Examples:
+        -i hades_out.csv              -> /current/working/dir/hades_out.csv
+        -i /full/path/hades_out.csv   -> /full/path/hades_out.csv
+    """
+    return os.path.abspath(path)
+
+
 # -------------------------
 # Chemistry helpers
 # -------------------------
 def oxygen_balance(C, H, O, mol_weight):
     if mol_weight == 0:
         return None
+
     return (-1600.0 / mol_weight) * (2 * C + (H / 2) - O)
 
 
 def atom_counts_from_smiles(smiles):
     mol = Chem.MolFromSmiles(smiles)
+
     if mol is None:
         return None
 
     mol = Chem.AddHs(mol)
+
     return Counter(atom.GetSymbol() for atom in mol.GetAtoms())
 
 
 # -------------------------
 # Main logic
 # -------------------------
-with open(input_csv, newline="") as f:
-    reader = csv.DictReader(f)
-    rows = list(reader)
+def main():
+    input_csv = resolve_path(args.input)
 
-if not rows:
-    raise RuntimeError("Input CSV is empty")
+    if args.output is None:
+        output_csv = input_csv
+    else:
+        output_csv = resolve_path(args.output)
 
-# Validate headers
-required = {"CID", "SMILES"}
-missing = required - set(rows[0].keys())
-if missing:
-    raise RuntimeError(f"Missing required columns: {missing}")
+    print(f"\nInput CSV: {input_csv}")
+    print(f"Output CSV: {output_csv}")
 
-# Add column if missing
-fieldnames = list(rows[0].keys())
-if "Oxygen Balance /%" not in fieldnames:
-    fieldnames.append("Oxygen Balance /%")
+    if not os.path.isfile(input_csv):
+        raise FileNotFoundError(f"Input CSV not found: {input_csv}")
 
-pbar = tqdm(rows, desc="Calculating oxygen balance", unit="mol")
+    with open(input_csv, newline="") as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
 
-for row in pbar:
-    smiles = row["SMILES"].strip()
+    if not rows:
+        raise RuntimeError(f"Input CSV is empty: {input_csv}")
 
-    OB = ""
-    if smiles:
-        counts = atom_counts_from_smiles(smiles)
-        if counts is not None:
-            C = counts.get("C", 0)
-            H = counts.get("H", 0)
-            O = counts.get("O", 0)
+    fieldnames = list(rows[0].keys())
 
-            mol_weight = sum(
-                ATOMIC_WEIGHTS.get(el, 0.0) * n
-                for el, n in counts.items()
-            )
+    # Only SMILES is actually required for oxygen balance
+    required = {"SMILES"}
+    missing = required - set(fieldnames)
 
-            val = oxygen_balance(C, H, O, mol_weight)
-            if val is not None:
-                OB = round(val, 2)
+    if missing:
+        raise RuntimeError(
+            f"Missing required columns: {missing}. "
+            f"Available columns are: {fieldnames}"
+        )
 
-    row["Oxygen Balance /%"] = OB
+    ob_col = "Oxygen Balance /%"
 
-pbar.close()
+    if ob_col not in fieldnames:
+        fieldnames.append(ob_col)
 
-with open(output_csv, "w", newline="") as f:
-    writer = csv.DictWriter(f, fieldnames=fieldnames)
-    writer.writeheader()
-    writer.writerows(rows)
+    pbar = tqdm(
+        rows,
+        desc="Calculating oxygen balance",
+        unit="molecule"
+    )
 
-print(f"Updated CSV written to: {output_csv}")
+    for row in pbar:
+        smiles = str(row.get("SMILES", "")).strip()
+
+        OB = ""
+
+        if smiles:
+            counts = atom_counts_from_smiles(smiles)
+
+            if counts is not None:
+                C = counts.get("C", 0)
+                H = counts.get("H", 0)
+                O = counts.get("O", 0)
+
+                mol_weight = sum(
+                    ATOMIC_WEIGHTS.get(el, 0.0) * n
+                    for el, n in counts.items()
+                )
+
+                val = oxygen_balance(C, H, O, mol_weight)
+
+                if val is not None:
+                    OB = round(val, 2)
+
+        row[ob_col] = OB
+
+    with open(output_csv, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    print(f"\nUpdated CSV written to: {output_csv}")
+
+
+if __name__ == "__main__":
+    main()

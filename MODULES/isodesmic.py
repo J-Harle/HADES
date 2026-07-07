@@ -5,7 +5,40 @@ from math import comb
 from tqdm import tqdm
 import pandas as pd
 import os
+import argparse
 import numpy as np
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Calculate enthalpy of formation using isodesmic reactions"
+    )
+
+    parser.add_argument(
+        "--input", "-i",
+        type=str,
+        required=True,
+        help="Input CSV containing CID and SMILES columns"
+    )
+
+    parser.add_argument(
+        "--outdir", "-dir",
+        type=str,
+        default="HADES",
+        help=(
+            "Name of subdirectory inside OPTIMISED_STRUCTURES containing "
+            "optimised molecule folders. Default: HADES"
+        )
+    )
+
+    parser.add_argument(
+        "--nrows", "-n",
+        type=int,
+        default=None,
+        help="Number of rows/targets to process. Default: process all rows."
+    )
+
+    return parser.parse_args()
+
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -16,19 +49,13 @@ HARTREE_TO_KJMOL = 2625.49962
 # =========================================================
 # ENERGY PARSING
 # =========================================================
-def read_mace_energy_from_thermo(script_dir, cid):
+def read_mace_energy_from_thermo(optimised_dir, cid):
 
     thermo_path = os.path.join(
-         script_dir, "..", "OPTIMISED_STRUCTURES", "30_MOL", f"{cid}", f"{cid}_thermo.txt"
+        optimised_dir,
+        f"{cid}",
+        f"{cid}_thermo.txt",
     )
-
-    # thermo_path = os.path.join(
-    #      script_dir, "..", "OPTIMISED_STRUCTURES", "DET_V_P_TEST", f"{cid}", f"{cid}_thermo.txt"
-    # )
-
-    # thermo_path = os.path.join(
-    #    script_dir, "..", "OPTIMISED_STRUCTURES", "LARGE_DATASET", f"{cid}", f"{cid}_thermo.txt"
-    # )
 
     # print(thermo_path)
 
@@ -100,7 +127,7 @@ def read_reference_csv(csv_path):
 # =========================================================
 # TARGETS
 # =========================================================
-def read_target_mol(csv_path, nrows=None):
+def read_target_mol(csv_path, optimised_dir, nrows=None):
 
     df = pd.read_csv(csv_path, nrows=nrows)
     targets = []
@@ -124,7 +151,7 @@ def read_target_mol(csv_path, nrows=None):
             a, b = sorted([a1, a2])
             counts[f"{a}-{b} {bond.GetBondType()}"] += 1
 
-        mace_energy = read_mace_energy_from_thermo(script_dir, cid)
+        mace_energy = read_mace_energy_from_thermo(optimised_dir, cid)
         if mace_energy is None:
             print(f"[SKIPPED] CID {cid} — no thermo energy")
             continue
@@ -416,41 +443,79 @@ def update_csv_with_results(csv_path, results):
 # =========================================================
 if __name__ == "__main__":
 
+    args = parse_args()
+
     max_r = 3          # max reactant combo size
     max_p = 3          # max product combo size
+    save_every = 1000
 
-    # csv_path = os.path.join(script_dir, "..", "hades_out.csv")
-    csv_path = os.path.join(script_dir, "..", "30_bench.csv")
-    # csv_path = os.path.join(script_dir, "..", "large_data.csv")
+    csv_path = os.path.abspath(args.input)
 
-    ref_csv_path = os.path.join(script_dir, "EOF", "isodesmic.csv")
+    optimised_dir = os.path.abspath(
+        os.path.join(
+            script_dir,
+            "..",
+            "OPTIMISED_STRUCTURES",
+            args.outdir,
+        )
+    )
+
+    ref_csv_path = os.path.join(
+        script_dir,
+        "EOF",
+        "isodesmic.csv",
+    )
+
+    print(f"Input CSV: {csv_path}")
+    print(f"Optimised structure directory: {optimised_dir}")
+    print(f"Reference CSV: {ref_csv_path}")
 
     # ----------------------------------------
     # Load data
     # ----------------------------------------
     json_data = read_reference_csv(ref_csv_path)
-    targets = read_target_mol(csv_path, nrows=100000)
+
+    targets = read_target_mol(
+        csv_path,
+        optimised_dir,
+        nrows=None,
+    )
 
     # ----------------------------------------
     # Build feature space
     # ----------------------------------------
-    feature_list, feature_index = build_feature_index(json_data, targets)
+    feature_list, feature_index = build_feature_index(
+        json_data,
+        targets,
+    )
 
     # ----------------------------------------
     # Vectorise
     # ----------------------------------------
-    names, ref_vecs = vectorise_reference(json_data, feature_index)
-    target_vecs = vectorise_targets(targets, feature_index)
+    names, ref_vecs = vectorise_reference(
+        json_data,
+        feature_index,
+    )
+
+    target_vecs = vectorise_targets(
+        targets,
+        feature_index,
+    )
 
     # ----------------------------------------
-    # Build combination cache (used for BOTH sides now)
+    # Build combination cache
     # ----------------------------------------
-    combo_vecs, combo_names = build_combo_cache(names, ref_vecs, max_r=max_r)
+    combo_vecs, combo_names = build_combo_cache(
+        names,
+        ref_vecs,
+        max_r=max_r,
+    )
 
     # ----------------------------------------
     # FAST lookup for combo vectors
     # ----------------------------------------
     print("[LOOKUP] Building combo lookup...")
+
     combo_lookup = {
         tuple(vec.tolist()): i
         for i, vec in enumerate(combo_vecs)
@@ -458,81 +523,83 @@ if __name__ == "__main__":
 
     results = {}
 
-# ----------------------------------------
-# Main loop
-# ----------------------------------------
-save_every = 1000
-for idx, (target, target_vec) in enumerate(zip(targets, target_vecs), start=1):
+    # ----------------------------------------
+    # Main loop
+    # ----------------------------------------
+    for idx, (target, target_vec) in enumerate(
+        zip(targets, target_vecs),
+        start=1,
+    ):
 
-    cid = target["CID"]
-    print(f"\n=== CID {cid} ({idx}/{len(targets)}) ===")
+        cid = target["CID"]
+        print(f"\n=== CID {cid} ({idx}/{len(targets)}) ===")
 
-    solutions = find_isodesmics(
-        combo_vecs=combo_vecs,
-        combo_names=combo_names,
-        target_vec=target_vec,
-        target_smiles=target["SMILES"],
-        combo_lookup=combo_lookup,
-        max_product_r=max_p
-    )
-
-    if not solutions:
-        print("No reactions found")
-        results[cid] = {
-            "Hf_kJmol": None,
-            "Hf_spread_kJmol": None
-        }
-
-    else:
-
-        # ----------------------------------------
-        # Energetics
-        # ----------------------------------------
-        calculate_hr(
-            solutions,
-            target["MACE_energy_Ha"],
-            json_data,
-            target["SMILES"]
+        solutions = find_isodesmics(
+            combo_vecs=combo_vecs,
+            combo_names=combo_names,
+            target_vec=target_vec,
+            target_smiles=target["SMILES"],
+            combo_lookup=combo_lookup,
+            max_product_r=max_p,
         )
 
-        calculate_hf(
-            solutions,
-            json_data,
-            target["SMILES"]
-        )
-
-        mean_hf, spread, filtered = filter_and_average(solutions)
-
-        if not filtered:
-            print("No good reactions after filtering")
-
+        if not solutions:
+            print("No reactions found")
             results[cid] = {
                 "Hf_kJmol": None,
-                "Hf_spread_kJmol": None
+                "Hf_spread_kJmol": None,
             }
 
         else:
+            calculate_hr(
+                solutions,
+                target["MACE_energy_Ha"],
+                json_data,
+                target["SMILES"],
+            )
 
-            print(f"Valid reactions: {len(filtered)}")
-            print(f"Mean Hf: {mean_hf * HARTREE_TO_KJMOL:.2f} kJ/mol")
+            calculate_hf(
+                solutions,
+                json_data,
+                target["SMILES"],
+            )
 
-            results[cid] = {
-                "Hf_kJmol": mean_hf * HARTREE_TO_KJMOL,
-                "Hf_spread_kJmol": spread * HARTREE_TO_KJMOL
-            }
+            mean_hf, spread, filtered = filter_and_average(
+                solutions,
+            )
+
+            if not filtered:
+                print("No good reactions after filtering")
+
+                results[cid] = {
+                    "Hf_kJmol": None,
+                    "Hf_spread_kJmol": None,
+                }
+
+            else:
+                print(f"Valid reactions: {len(filtered)}")
+                print(
+                    f"Mean Hf: {mean_hf * HARTREE_TO_KJMOL:.2f} kJ/mol"
+                )
+
+                results[cid] = {
+                    "Hf_kJmol": mean_hf * HARTREE_TO_KJMOL,
+                    "Hf_spread_kJmol": spread * HARTREE_TO_KJMOL,
+                }
+
+        # ----------------------------------------
+        # Periodic save
+        # ----------------------------------------
+        if idx % save_every == 0:
+            print(f"\n[CHECKPOINT] Writing results at step {idx}...")
+            update_csv_with_results(csv_path, results)
+            print("[CHECKPOINT] CSV updated.")
 
     # ----------------------------------------
-    # Periodic save
-    # ----------------------------------------
-    if idx % save_every == 0:
-
-        print(f"\n[CHECKPOINT] Writing results at step {idx}...")
-
-        update_csv_with_results(csv_path, results)
-
-        print("[CHECKPOINT] CSV updated.")
-    # ----------------------------------------
-    # Save results
+    # Final save
     # ----------------------------------------
     update_csv_with_results(csv_path, results)
-    # print(f"Results written to {csv_path}")
+
+    print("\nDone.")
+    print(f"Processed targets: {len(results)}")
+    print(f"Updated CSV: {csv_path}")
