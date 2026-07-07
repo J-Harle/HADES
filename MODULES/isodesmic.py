@@ -18,17 +18,17 @@ HARTREE_TO_KJMOL = 2625.49962
 # =========================================================
 def read_mace_energy_from_thermo(script_dir, cid):
 
-    # thermo_path = os.path.join(
-    #      script_dir, "..", "OPTIMISED_STRUCTURES", "30_MOL", f"{cid}", f"{cid}_thermo.txt"
-    # )
+    thermo_path = os.path.join(
+         script_dir, "..", "OPTIMISED_STRUCTURES", "30_MOL", f"{cid}", f"{cid}_thermo.txt"
+    )
 
     # thermo_path = os.path.join(
     #      script_dir, "..", "OPTIMISED_STRUCTURES", "DET_V_P_TEST", f"{cid}", f"{cid}_thermo.txt"
     # )
 
-    thermo_path = os.path.join(
-       script_dir, "..", "OPTIMISED_STRUCTURES", "LARGE_DATASET", f"{cid}", f"{cid}_thermo.txt"
-    )
+    # thermo_path = os.path.join(
+    #    script_dir, "..", "OPTIMISED_STRUCTURES", "LARGE_DATASET", f"{cid}", f"{cid}_thermo.txt"
+    # )
 
     # print(thermo_path)
 
@@ -175,11 +175,11 @@ def build_feature_index(json_data, targets):
     feature_list = sorted(features)
     feature_index = {k: i for i, k in enumerate(feature_list)}
 
-    print(f"[FEATURE] {len(feature_list)} dimensions")
+    # print(f"[FEATURE] {len(feature_list)} dimensions")
 
-    print("[FEATURE] Dimensions:")
-    for i, f in enumerate(feature_list):
-        print(f"{i:4d}: {f}")
+    # print("[FEATURE] Dimensions:")
+    # for i, f in enumerate(feature_list):
+    #     print(f"{i:4d}: {f}")
 
     return feature_list, feature_index
 
@@ -416,12 +416,12 @@ def update_csv_with_results(csv_path, results):
 # =========================================================
 if __name__ == "__main__":
 
-    max_r = 4          # max reactant combo size
-    max_p = 4          # max product combo size
+    max_r = 3          # max reactant combo size
+    max_p = 3          # max product combo size
 
     # csv_path = os.path.join(script_dir, "..", "hades_out.csv")
-    # csv_path = os.path.join(script_dir, "..", "bak_30_bench.csv")
-    csv_path = os.path.join(script_dir, "..", "large_data.csv")
+    csv_path = os.path.join(script_dir, "..", "30_bench.csv")
+    # csv_path = os.path.join(script_dir, "..", "large_data.csv")
 
     ref_csv_path = os.path.join(script_dir, "EOF", "isodesmic.csv")
 
@@ -535,4 +535,4 @@ for idx, (target, target_vec) in enumerate(zip(targets, target_vecs), start=1):
     # Save results
     # ----------------------------------------
     update_csv_with_results(csv_path, results)
-    print(f"Results written to {csv_path}")
+    # print(f"Results written to {csv_path}")

@@ -6,7 +6,6 @@ import multiprocessing
 import contextlib
 import urllib.request
 import pandas as pd
-import numpy as np
 
 # -----------------------------------------------------------------------------
 # ENVIRONMENT VARIABLES
@@ -57,22 +56,9 @@ torch.set_num_interop_threads(1)
 # CSV
 # -----------------------------------------------------------------------------
 def read_csv(filename):
-    df = pd.read_csv(filename, dtype=str) 
-
+    df = pd.read_csv(filename)
     df.columns = [c.strip().upper() for c in df.columns]
-
-    df = df[["CID", "SMILES"]]
-
-    # Clean whitespace
-    df["SMILES"] = df["SMILES"].str.strip()
-    df["CID"] = df["CID"].str.strip()
-
-    # Drop junk rows
-    df = df.dropna(subset=["SMILES"])
-    df = df[df["SMILES"] != ""]
-    df = df[df["SMILES"].str.lower() != "nan"]
-
-    return df
+    return df[["CID", "SMILES"]]
 
 # -----------------------------------------------------------------------------
 # RDKit → ASE
@@ -98,28 +84,6 @@ def create_ase_objs(smiles_list, max_attempts=10):
         atoms_list.append(atoms)
 
     return atoms_list
-
-# -----------------------------------------------------------------------------
-# GEOMETRY REGENERATION
-# -----------------------------------------------------------------------------
-def regenerate_atoms(smiles, method="rdkit", atoms=None, noise=0.05):
-    if method == "rdkit":
-        mol = Chem.MolFromSmiles(smiles)
-        mol = Chem.AddHs(mol)
-
-        if AllChem.EmbedMolecule(mol, AllChem.ETKDG()) != 0:
-            return None
-
-        xyz_block = Chem.MolToXYZBlock(mol)
-        return read(StringIO(xyz_block), format="xyz")
-
-    elif method == "perturb" and atoms is not None:
-        new_atoms = atoms.copy()
-        disp = noise * (np.random.rand(len(new_atoms), 3) - 0.5)
-        new_atoms.set_positions(new_atoms.get_positions() + disp)
-        return new_atoms
-
-    return None
 
 # -----------------------------------------------------------------------------
 # MACE
@@ -171,63 +135,51 @@ def optimise_and_write_single(args):
     # ---------------- SPE ----------------
     spe = atoms.get_potential_energy()
 
-    # ---------------- THERMO WITH RETRIES ----------------
-    thermo_success = False
-    max_attempts = 25
+    # ---------------- THERMO ----------------
+    thermo_success = True
+    try:
+        vib_dir = os.path.join(mol_dir, "vib")
+        vib = Vibrations(atoms, name=os.path.join(vib_dir, "vib"))
+        vib.run()
 
-    for attempt in range(max_attempts):
-        try:
-            vib_dir = os.path.join(mol_dir, f"vib_{attempt}")
-            vib = Vibrations(atoms, name=os.path.join(vib_dir, "vib"))
-            vib.run()
+        # ---------------- HESSIAN ----------------
+        hessian = vib.get_vibrations().get_hessian()
 
-            energies = vib.get_energies()
-            vib_energies = [e for e in energies if e > 1e-6]
+        natoms = len(atoms)
+        hessian = hessian.reshape(3 * natoms, 3 * natoms)
+        hessian_path = os.path.join(mol_dir, f"{mol_id}_hessian.txt")
+        
+        with open(hessian_path, "w") as f:
+            f.write("# Cartesian Hessian\n")
+            f.write(f"# Dimensions: {hessian.shape[0]} x {hessian.shape[1]}\n")
 
-            if len(vib_energies) == 0:
-                raise RuntimeError("No positive vibrational modes")
+            for row in hessian:
+                f.write(" ".join(f"{x:20.10e}" for x in row) + "\n")
 
-            thermo = IdealGasThermo(
-                vib_energies=vib_energies,
-                potentialenergy=spe,
-                atoms=atoms,
-                geometry='nonlinear',
-                symmetrynumber=1,
-                spin=0,
-            )
+        print(hessian.shape)
 
-            T = 300.00
-            P = 101000.0
+        energies = vib.get_energies()
+        vib_energies = [e for e in energies if e > 0]
 
-            zpe = thermo.get_ZPE_correction()
-            H = thermo.get_enthalpy(T)
-            G = thermo.get_gibbs_energy(T, P)
+        thermo = IdealGasThermo(
+            vib_energies=vib_energies,
+            potentialenergy=spe,
+            atoms=atoms,
+            geometry='nonlinear',
+            symmetrynumber=1,
+            spin=0,
+        )
 
-            thermo_success = True
-            vib.clean()
-            break
+        T = 298.15
+        P = 100000.0
 
-        except Exception as e:
-            print(f"[THERMO FAILED - attempt {attempt}] {mol_id}: {e}")
+        zpe = thermo.get_ZPE_correction()
+        H = thermo.get_enthalpy(T)
+        G = thermo.get_gibbs_energy(T, P)
 
-            # --- regenerate geometry ---
-            if attempt % 2 == 0:
-                new_atoms = regenerate_atoms(smiles, method="perturb", atoms=atoms)
-            else:
-                new_atoms = regenerate_atoms(smiles, method="rdkit")
-
-            if new_atoms is None:
-                continue
-
-            with suppress_output():
-                calc = get_mace_calculator()
-                new_atoms.calc = calc
-
-            dyn = BFGS(new_atoms, logfile=os.path.join(mol_dir, f"{mol_id}_retry{attempt}.log"))
-            dyn.run(fmax=0.001)
-
-            atoms = new_atoms
-            spe = atoms.get_potential_energy()
+    except Exception as e:
+        print(f"[THERMO FAILED] {mol_id}: {e}")
+        thermo_success = False
 
     # ---------------- WRITE XYZ ----------------
     xyz_path = os.path.join(mol_dir, f"{mol_id}.xyz")
@@ -251,6 +203,8 @@ def optimise_and_write_single(args):
             f.write(f"Enthalpy H({T} K)            : {H:.10f} eV\n")
             f.write(f"Gibbs free energy G({T} K)   : {G:.10f} eV\n")
 
+        vib.clean()
+
     del atoms.calc
     return mol_id, xyz_path
 
@@ -258,9 +212,8 @@ def optimise_and_write_single(args):
 # PARALLEL DRIVER
 # -----------------------------------------------------------------------------
 def optimise_and_write_parallel(atoms_list, smiles_list, id_list,
-                                # base_dir="../OPTIMISED_STRUCTURES/SMALL_MODEL/AROMATIC",
-                                base_dir="../OPTIMISED_STRUCTURES/DET_V_P_TEST",
-                                # base_dir="../OPTIMISED_STRUCTURES/LARGE_DATASET",
+                                # base_dir="OPTIMISED_STRUCTURES/SMALL_MODEL/",
+                                base_dir="OPTIMISED_STRUCTURES/30_MOL/",
                                 ncores=None):
 
     tasks = [
@@ -289,9 +242,10 @@ def optimise_and_write_parallel(atoms_list, smiles_list, id_list,
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    # csv_path = os.path.join(script_dir, "..", "large_data.csv")
-    csv_path = os.path.join(script_dir, "..", "bak_30_bench.csv")
+    # csv_path = os.path.join(script_dir, "MODULES", "Storm_dataset.csv")
+    csv_path = "30_bench.csv"
 
+	
     df = read_csv(csv_path)
 
     atoms_list = create_ase_objs(df["SMILES"].tolist())
@@ -300,7 +254,8 @@ if __name__ == "__main__":
         atoms_list,
         df["SMILES"].tolist(),
         df["CID"].tolist(),
-        ncores=38,
+        ncores=40
     )
 
     print("All jobs complete.")
+
