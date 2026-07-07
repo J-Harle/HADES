@@ -114,7 +114,7 @@ def main():
             f"Generating {args.generate} molecules",
             [
                 "python",
-                f"{parent_dir}/ARG_MODULES/substitution.py",
+                f"{parent_dir}/MODULES/substitution.py",
                 "-i", args.input or "none",
                 "-o", args.output,
                 "-n", str(args.generate)
@@ -126,7 +126,7 @@ def main():
             "Optimising generated molecules",
             [
                 "python",
-                f"{parent_dir}/ARG_MODULES/create_object.py",
+                f"{parent_dir}/MODULES/create_object.py",
                 "-i", args.output,
                 "--outdir", args.outdir,
                 "-c", str(args.cpus)
@@ -138,7 +138,7 @@ def main():
             "Calculating vibrations",
             [
                 "python",
-                f"{parent_dir}/ARG_MODULES/vibration.py",
+                f"{parent_dir}/MODULES/vibration.py",
                 "-i", args.output
             ]
         ))
@@ -148,7 +148,7 @@ def main():
             "Predicting impact sensitivity",
             [
                 "python",
-                f"{parent_dir}/ARG_MODULES/uppumping.py",
+                f"{parent_dir}/MODULES/uppumping.py",
                 "-i", args.output
             ]
         ))
@@ -158,7 +158,7 @@ def main():
             "Calculating oxygen balance",
             [
                 "python",
-                f"{parent_dir}/ARG_MODULES/oxygen_balance.py",
+                f"{parent_dir}/MODULES/oxygen_balance.py",
                 "-i", args.output
             ]
         ))
@@ -166,7 +166,7 @@ def main():
     if args.enthalpy_of_formation:
         command = [
             "python",
-            f"{parent_dir}/ARG_MODULES/isodesmic.py",
+            f"{parent_dir}/MODULES/isodesmic.py",
             "-i", args.output,
             "-dir", args.outdir,
         ]
@@ -186,7 +186,7 @@ def main():
             "Predicting generic properties",
             [
                 "python",
-                f"{parent_dir}/ARG_MODULES/generic_properties.py",
+                f"{parent_dir}/MODULES/generic_properties.py",
                 "-i", args.output
             ]
         ))
@@ -196,7 +196,7 @@ def main():
             "Predicting detonation properties",
             [
                 "python",
-                f"{parent_dir}/ARG_MODULES/test_det_v_p.py",
+                f"{parent_dir}/MODULES/det_v_p.py",
                 "-i", args.output,
                 "-dir", args.outdir,
             ]
