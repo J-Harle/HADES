@@ -5,7 +5,7 @@ High-throughput Analysis for the Design of Energetic Systems
 Clone the HADES repo: `git clone https://github.com/J-Harle/HADES`
 
 ## Create HADES Environment
-Create the HADES environment: `conda env create -f hades.yml`
+Create the HADES environment: `conda env create -f hades.yml` <br>
 Then: `conda activate hades`
 
 ## Command Line Interface (CLI)
