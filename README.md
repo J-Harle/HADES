@@ -22,7 +22,7 @@ Options:
 - `--generic-properties` / `-gprop` – Calculate a large number of properties available in RDKit.
 
 Example usage: 
-`python hades.py -g -opt -v -s`
+`python hades.py -g -opt -v -s` <br>
 This will generate and optimise a set of molecules, then perform a frequency calculation and subsequently predict the impact sensitivity of the molecules
 
 ## Todo:
