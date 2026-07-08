@@ -22,15 +22,16 @@ Options:
 - `--impact-sensitivity` / `-s` – Predict the impact sensitivity of the generated molecules.<br>
 - `--oxygen-balance` / `-ob` – Calculate the oxygen balance of the `-g` or `-i` molecules.<br>
 - `--enthalpy-of-formation` / `-eof` – Predict the enthalpy of formation for the `-g` or `-i` molecules.<br>
-- `--generic-properties` / `-gprop` – Calculate a large number of properties available in RDKit.
-- `--detonation-properties` / `-det` – Predict the detonation pressure and velocities of all `-g` or `-i`.
+- `--generic-properties` / `-gprop` – Calculate a large number of properties available in RDKit. <br>
+- `--detonation-properties` / `-det` – Predict the detonation pressure and velocities of all `-g` or `-i`. <br>
 
 Example usage: 
 `python hades.py -g 5000 -opt -v -s` <br>
-This will generate 5000 molecules and optimise, then perform a frequency calculation and subsequently predict the impact sensitivity of the molecules
+This will generate 5000 molecules and optimise, then perform a frequency calculation and subsequently predict the impact sensitivity of the molecules.
 
 ##Things to note:
-- 
+- `-det` requires the enthalpy of formation, and therefore, it must be present in `-i` or must be first calculated with `-eof`.
+- `-s` requires a vibrational spectrum in a custom .txt format, it is highly recommended to use `-v` to calculate them.
 
 ## Todo:
 - For -opt add a choice of MACE model size / program to use (Can only use ASE supported programs), this will also need to be passed to -eof and -v
