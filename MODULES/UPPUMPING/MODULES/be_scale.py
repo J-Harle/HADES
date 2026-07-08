@@ -3,6 +3,8 @@ import csv
 import json
 import math
 import sys
+import ast
+import argparse
 import numpy as np
 from tqdm import tqdm
 import scipy.constants
@@ -11,78 +13,119 @@ csv.field_size_limit(sys.maxsize)
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
-def read_data_from_csv(csv_name="raw.csv"):
-    csv_path = os.path.join(script_dir, csv_name)
 
-    if not os.path.isfile(csv_path):
-        raise FileNotFoundError(f"[ERROR] CSV not found: {csv_path}")
+# =========================================================
+# ARGPARSE
+# =========================================================
 
-    data = []
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Generate DOS and Bose-Einstein-scaled DOS columns for a CSV."
+    )
 
-    with open(csv_path, "r", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
+    parser.add_argument(
+        "--input", "-i",
+        type=str,
+        required=True,
+        help="Input CSV filename or path."
+    )
 
-        for row in reader:
-            try:
-                data.append({
-                    "molecule": row["molecule"],
-                    "SMILES": row["SMILES"],
-                    "cluster_id": (row["cluster_id"]),
-                    "H50": float(row["H50"]),
-                    "exp_ratio": float(row["exp_ratio"]),
-                    "atom_count": int(row["atom_count"]),
-                    "frequencies": json.loads(row["frequencies"]),
-                    # "exp_freqs": json.loads(row["explosophore freqs"]),
-                    "coordinates": json.loads(row["coordinates"]),
-                    # "eigenvectors": json.loads(row["eigenvectors"]),
-                    "omega_max": json.loads(row["omega_max"]),
-                })
-            except Exception as e:
-                print(f"[WARN] Skipping row due to parsing error: {e}")
+    parser.add_argument(
+        "--dir", "-dir",
+        dest="csv_dir",
+        type=str,
+        default=".",
+        help="Directory containing the input CSV and where the output CSV should be written. Default: current directory."
+    )
 
-    # print(f"[INFO] Loaded {len(data)} molecules from CSV\n")
-    return data
+    parser.add_argument(
+        "--output", "-o",
+        type=str,
+        default=None,
+        help="Output CSV filename or path. If omitted, the input CSV is overwritten safely."
+    )
 
+    parser.add_argument(
+        "--bwidth",
+        type=float,
+        default=0.5,
+        help="DOS bin width. Default: 0.5"
+    )
+
+    parser.add_argument(
+        "--gwidth",
+        type=float,
+        default=2.5,
+        help="Gaussian broadening width. Default: 2.5"
+    )
+
+    parser.add_argument(
+        "--save-interval",
+        type=int,
+        default=1000,
+        help="Number of rows between output flushes. Default: 1000"
+    )
+
+    return parser.parse_args()
+
+
+def resolve_path(path, base_dir):
+    """
+    Resolve path robustly.
+
+    Absolute paths are used directly.
+    Relative paths are interpreted relative to base_dir.
+    """
+    if os.path.isabs(path):
+        return path
+
+    return os.path.abspath(os.path.join(base_dir, path))
+
+# =========================================================
+# DOS FUNCTIONS
+# =========================================================
 
 def histogram(freqs, bwidth, len_bins, base):
+    
     hist = np.zeros(len_bins)
+
     for freq in freqs:
         bin_idx = int((freq - base) / bwidth)
         if 0 <= bin_idx < len_bins:
             hist[bin_idx] += 1.0
+
     return hist
 
 
 def gaussian_broadening(histogram, bwidth, gwidth):
+
     len_bins = len(histogram)
     dos = np.zeros(len_bins)
-    sigma = gwidth / 2.354  # FWHM → σ
+    sigma = gwidth / 2.354
 
     if gwidth < bwidth:
         dos[:] = histogram / bwidth
+
     else:
         half_width = int(3.0 * gwidth / bwidth)
 
         for i in range(-half_width, half_width + 1):
-            weight = math.exp(
-                -((i * bwidth) ** 2) / (2.0 * sigma ** 2)
-            ) / (math.sqrt(2.0 * math.pi) * sigma)
+            weight = math.exp(-((i * bwidth) ** 2) / (2.0 * sigma ** 2)) / (math.sqrt(2.0 * math.pi)* sigma)
 
-            for h in range(
-                max(i, 0),
-                min(len_bins + i - 1, len_bins - 1) + 1
-            ):
-                dos[h] += histogram[h - i] * weight
+            for h in range(max(i, 0), min(len_bins + i - 1, len_bins - 1) + 1):
+                dos[h] += (histogram[h - i] * weight)
 
     return dos
 
 
 def normalise_dos(dos, atom_count, bwidth, name):
     area = np.trapz(dos, dx=bwidth)
-    normalisation_factor =  1 # 3 * atom_count
+
+    normalisation_factor = 1
 
     if area > 0:
-        dos *= normalisation_factor / area
+        dos *= (normalisation_factor / area)
+
     else:
         print(f"[ERROR] Zero DOS area for {name}")
 
@@ -90,20 +133,22 @@ def normalise_dos(dos, atom_count, bwidth, name):
 
 
 def generate_dos(freqs, name, atom_count, bwidth, gwidth):
+
     if not freqs or atom_count is None:
         print(f"[ERROR] Missing data for {name}")
+
         return None, None
 
     base = 0.0
     max_freq = np.max(freqs)
-
     len_bins = int((max_freq - base) / bwidth) + 1
+
     if len_bins <= 0:
-        print(f"[ERROR] Invalid bin count for {name}")
+        print(
+            f"[ERROR] Invalid bin count for {name}")
         return None, None
 
     frequency_axis = np.linspace(base, max_freq, len_bins)
-
     hist = histogram(freqs, bwidth, len_bins, base)
     dos = gaussian_broadening(hist, bwidth, gwidth)
     dos = normalise_dos(dos, atom_count, bwidth, name)
@@ -111,159 +156,195 @@ def generate_dos(freqs, name, atom_count, bwidth, gwidth):
     return frequency_axis, dos
 
 
-def compute_all_dos(data, bwidth, gwidth):
+# =========================================================
+# BE SCALING
+# =========================================================
 
-    for mol in tqdm(data, desc="Calculating DOS", unit="molecule"):
+def bose_einstein_scaling(mol):
 
-        atom_count = mol["atom_count"]
-        name = mol["molecule"]
-
-        # ---------- Normal frequencies ----------
-        freqs = mol.get("frequencies", [])
-
-        if freqs:
-            frequency_axis, dos = generate_dos(
-                freqs, name, atom_count, bwidth, gwidth
-            )
-
-            if dos is not None:
-                mol["frequency_axis"] = frequency_axis
-                mol["dos"] = dos
-
-
-    print()
-    return data
-
-def bose_einstein_scaling(all_results):
     hbar = scipy.constants.hbar
     k = scipy.constants.k
     t = 300
 
-    for mol in all_results:
-        # ---------- Explosophore DOS ----------
-        if "exp_dos" in mol:
+    # =====================================================
+    # STANDARD DOS
+    # =====================================================
 
-            freq_axis = mol["exp_frequency_axis"]
-            dos = mol["exp_dos"]
+    if "dos" in mol:
+        freq_axis = np.array(mol["frequency_axis"])
+        dos = np.array(mol["dos"])
+        be_dos = np.copy(dos)
 
-            be_dos = np.copy(dos)
+        for i, w in enumerate(freq_axis):
+            if w > 5:
+                n = (1.0 / (np.exp(hbar * (w * (2 * math.pi) * (1E9 * 29.979245)) / (k * t)) - 1.0))
 
-            for i, w in enumerate(freq_axis):
-                if w > 5:
-                   
-                    be_dos[i] = dos[i] * n
+                be_dos[i] = (dos[i] * n)
 
-            mol["exp_be_dos"] = be_dos
+        mol["be_dos"] = be_dos
 
-
-        # ---------- Standard DOS ----------
-        if "dos" in mol:
-
-            freq_axis = mol["frequency_axis"]
-            dos = mol["dos"]
-
-            be_dos = np.copy(dos)
-
-            for i, w in enumerate(freq_axis):
-                if w > 5:
-                    n = (1.0 /(np.exp(hbar * (w * (2 * math.pi) * (1E9 * 29.979245))/ (k * t)) - 1.0))
-                    be_dos[i] = dos[i] * n
-
-            mol["be_dos"] = be_dos
+    return mol
 
 
-        # ---------- Match length to full DOS ----------
-        if "be_dos" in mol and "exp_be_dos" in mol:
+# =========================================================
+# STREAMING CSV PROCESSING
+# =========================================================
 
-            target_len = len(mol["be_dos"])
-            exp_be = mol["exp_be_dos"]
+def process_csv_streaming(
+    input_csv,
+    output_csv=None,
+    csv_dir=".",
+    bwidth=0.5,
+    gwidth=2.5,
+    save_interval=1000
+):
 
-            if len(exp_be) < target_len:
-                pad = target_len - len(exp_be)
-                exp_be = np.pad(exp_be, (0, pad))
-            elif len(exp_be) > target_len:
-                exp_be = exp_be[:target_len]
+    csv_dir = os.path.abspath(csv_dir)
 
-            mol["exp_be_dos"] = exp_be
+    input_path = resolve_path(input_csv, csv_dir)
 
+    if output_csv is None:
+        output_path = input_path
+    else:
+        output_path = resolve_path(output_csv, csv_dir)
 
-    return all_results
+    if not os.path.isfile(input_path):
+        raise FileNotFoundError(f"[ERROR] CSV not found: {input_path}")
 
+    temp_output = output_path + ".tmp"
 
+    # =====================================================
+    # OPEN INPUT + OUTPUT ONCE
+    # =====================================================
 
-def write_updated_csv(data, csv_name="raw.csv"):
-    csv_path = os.path.join(script_dir, csv_name)
+    with open(input_path, "r", encoding="utf-8") as fin, \
+    open(temp_output, "w", newline="", encoding="utf-8") as fout:
 
-    if not data:
-        raise ValueError("[ERROR] No data to write.")
+        reader = csv.DictReader(fin)
+        fieldnames = list(reader.fieldnames)
 
-    # Ensure new fields exist in header
-    fieldnames = list(data[0].keys())
+        new_cols = ["frequency_axis", "dos", "be_dos",]
 
-    with open(csv_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        for col in new_cols:
+            if col not in fieldnames:
+                fieldnames.append(col)
+
+        writer = csv.DictWriter(fout, fieldnames=fieldnames)
+
         writer.writeheader()
 
-        for mol in data:
-            row = mol.copy()
+        # =================================================
+        # STREAM ROWS
+        # =================================================
 
-            # Convert numpy arrays to JSON strings
-            if "frequency_axis" in row:
-                row["frequency_axis"] = json.dumps(
-                    row["frequency_axis"].tolist()
-                )
+        for idx, row in enumerate(tqdm(reader, desc="Calculating DOS", unit="molecules "), start=1):
 
-            if "dos" in row:
-                row["dos"] = json.dumps(
-                    row["dos"].tolist()
-                )
+            try:
+                frequencies = json.loads(row["frequencies"])
 
-            if "be_dos" in row:
-                row["be_dos"] = json.dumps(
-                    row["be_dos"].tolist()
-                )
+                h50_raw = row.get("H50", "").strip()
 
-            if "exp_frequency_axis" in row:
-                row["exp_frequency_axis"] = json.dumps(
-                    row["exp_frequency_axis"].tolist()
-                )
+                if h50_raw == "":
+                    h50_value = None
 
-            if "exp_dos" in row:
-                row["exp_dos"] = json.dumps(
-                    row["exp_dos"].tolist()
-                )
+                else:
+                    h50_value = float(h50_raw)
 
-            if "exp_be_dos" in row:
-                row["exp_be_dos"] = json.dumps(
-                    row["exp_be_dos"].tolist()
-                )
+                mol = {
+                    "molecule": row["molecule"],
+                    "omega_max": row.get("omega_max"),
+                    "SMILES": row["SMILES"],
+                    "cluster_id": row["cluster_id"],
+                    "H50": h50_value,
+                    "exp_ratio": float(row["exp_ratio"]),
+                    "atom_count": int(row["atom_count"]),
+                    "frequencies": frequencies,
+                    "coordinates": ast.literal_eval(row["coordinates"]),
+                }
+
+                # =========================================
+                # GENERATE DOS
+                # =========================================
+
+                frequency_axis, dos = (
+                    generate_dos(freqs=mol["frequencies"],
+                        name=mol["molecule"],
+                        atom_count=mol["atom_count"],
+                        bwidth=bwidth,
+                        gwidth=gwidth))
+
+                if dos is not None:
+                    mol["frequency_axis"] = (frequency_axis)
+                    mol["dos"] = dos
+
+                    # =====================================
+                    # BE SCALING
+                    # =====================================
+
+                    mol = bose_einstein_scaling(mol)
+
+                    # =====================================
+                    # WRITE RESULTS
+                    # =====================================
+
+                    row["frequency_axis"] = (json.dumps(mol["frequency_axis"].tolist()))
+                    row["dos"] = json.dumps(mol["dos"].tolist())
+                    row["be_dos"] = json.dumps(mol["be_dos"].tolist())
+
+                else:
+
+                    row["frequency_axis"] = None
+                    row["dos"] = None
+                    row["be_dos"] = None
+
+            except Exception as e:
+
+                print(f"\n[WARN] Failed row {row.get('molecule', 'UNKNOWN')}")
+                print(f"Error: {e}")
+
+                row["frequency_axis"] = None
+                row["dos"] = None
+                row["be_dos"] = None
 
             writer.writerow(row)
 
-    # print("[INFO] CSV updated with frequency_axis, dos, be_dos\n")
+            # =============================================
+            # PERIODIC FLUSH
+            # =============================================
 
+            if idx % save_interval == 0:
+                fout.flush()
+
+
+    # =====================================================
+    # SAFE FILE REPLACEMENT
+    # =====================================================
+
+    os.replace(temp_output, output_path)
+
+# =========================================================
+# MAIN
+# =========================================================
 
 if __name__ == "__main__":
 
-    gwidth = 2.5
-    bwidth = 0.5
+    args = parse_args()
 
-    runs = [
-        "Storm_dataset_raw.csv",
-        "30_bench_raw.csv"
-    ]
+    print(f"\nProcessing: {args.input}")
+    print(f"Input directory: {os.path.abspath(args.csv_dir)}")
 
-    for csv_name in runs:
+    if args.output is None:
+        print("[INFO] Output not provided. Input CSV will be overwritten safely.")
+    else:
+        print(f"Output CSV: {args.output}")
 
-        print(f"\nProcessing: {csv_name}")
+    process_csv_streaming(
+        input_csv=args.input,
+        output_csv=args.output,
+        csv_dir=args.csv_dir,
+        bwidth=args.bwidth,
+        gwidth=args.gwidth,
+        save_interval=args.save_interval
+    )
 
-        data = read_data_from_csv(csv_name)
-
-        all_results = compute_all_dos(data, bwidth, gwidth)
-        all_results = bose_einstein_scaling(all_results)
-
-        # print(f"[DEBUG] Molecules after processing: {len(all_results)}")
-        write_updated_csv(all_results, csv_name)
-
-    # print(all_results[0].keys())
-    # print(f"[DEBUG] DOS + BE DOS computed for {len(all_results)} molecules")
+    print(f"[INFO] Finished: {args.output if args.output else args.input}\n")
