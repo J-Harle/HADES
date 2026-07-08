@@ -72,6 +72,55 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 EV_TO_HARTREE = 1.0 / 27.211386245988
 HARTREE_TO_KJMOL = 2625.49962
 
+TARGET_ID_COLUMN_CANDIDATES = [
+    "CID",
+    "molecule",
+    "MOLECULE",
+    "FILENAME",
+]
+
+
+def find_target_id_column(df):
+    """
+    Find the column used to identify target molecule folders.
+
+    Priority:
+        CID -> molecule -> MOLECULE -> FILENAME
+
+    Returns
+    -------
+    str
+        Name of the matched column.
+    """
+    # Strip whitespace from column names
+    df.columns = [str(col).strip() for col in df.columns]
+
+    for col in TARGET_ID_COLUMN_CANDIDATES:
+        if col in df.columns:
+            return col
+
+    raise KeyError(
+        "[ERROR] No valid target ID column found. "
+        f"Expected one of: {TARGET_ID_COLUMN_CANDIDATES}. "
+        f"Available columns: {list(df.columns)}"
+    )
+
+
+def find_smiles_column(df):
+    """
+    Find the SMILES column robustly.
+    """
+    df.columns = [str(col).strip() for col in df.columns]
+
+    for col in ["SMILES", "smiles", "Smiles"]:
+        if col in df.columns:
+            return col
+
+    raise KeyError(
+        "[ERROR] No SMILES column found. "
+        f"Available columns: {list(df.columns)}"
+    )
+
 
 # ENERGY PARSING
 def read_mace_energy_from_thermo(optimised_dir, cid):
@@ -201,15 +250,30 @@ def read_target_mol(csv_path, optimised_dir, nrows=None):
         feature dictionary, and MACE energy in Hartree.
     """
     df = pd.read_csv(csv_path, nrows=nrows)
+    target_id_col = find_target_id_column(df)
+    smiles_col = find_smiles_column(df)
+
+    print(f"[INFO] Using target ID column: {target_id_col}")
+    print(f"[INFO] Using SMILES column: {smiles_col}")
+
     targets = []
 
     for _, row in df.iterrows():
 
-        cid = str(row["CID"])
-        smiles = row["SMILES"]
+        cid = str(row[target_id_col]).strip()
+        smiles = row[smiles_col]
+
+        if cid == "" or cid.lower() == "nan":
+            print("[SKIPPED] Missing target identifier")
+            continue
+
+        if pd.isna(smiles):
+            print(f"[SKIPPED] {target_id_col} {cid} — missing SMILES")
+            continue
 
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
+            print(f"[SKIPPED] {target_id_col} {cid} — invalid SMILES")
             continue
 
         mol = Chem.AddHs(mol)
@@ -223,12 +287,14 @@ def read_target_mol(csv_path, optimised_dir, nrows=None):
             counts[f"{a}-{b} {bond.GetBondType()}"] += 1
 
         mace_energy = read_mace_energy_from_thermo(optimised_dir, cid)
+
         if mace_energy is None:
-            print(f"[SKIPPED] CID {cid} — no thermo energy")
+            print(f"[SKIPPED] {target_id_col} {cid} — no thermo energy")
             continue
 
         targets.append({
             "CID": cid,
+            "target_id_column": target_id_col,
             "SMILES": smiles,
             "atom_bond_dict": dict(counts),
             "MACE_energy_Ha": mace_energy
@@ -236,7 +302,6 @@ def read_target_mol(csv_path, optimised_dir, nrows=None):
 
     print(f"Loaded {len(targets)} targets")
     return targets
-
 
 # DICT OPS (kept for bond table/debug)
 def add_dicts(a, b):
@@ -685,24 +750,31 @@ def update_csv_with_results(csv_path, results):
         `Hf_spread_kJmol`.
     """
     df = pd.read_csv(csv_path)
-    df["CID"] = df["CID"].astype(str)
+
+    target_id_col = find_target_id_column(df)
+
+    print(f"[INFO] Updating CSV using target ID column: {target_id_col}")
+
+    df[target_id_col] = df[target_id_col].astype(str).str.strip()
 
     hf_col = "Hf /kJmol-1"
     spread_col = "Hf_spread /kJmol-1"
 
     if hf_col not in df.columns:
         df[hf_col] = None
+
     if spread_col not in df.columns:
         df[spread_col] = None
 
     for i, row in df.iterrows():
-        cid = str(row["CID"])
+
+        cid = str(row[target_id_col]).strip()
+
         if cid in results:
             df.at[i, hf_col] = results[cid]["Hf_kJmol"]
             df.at[i, spread_col] = results[cid]["Hf_spread_kJmol"]
 
     df.to_csv(csv_path, index=False)
-
 
 # MAIN
 if __name__ == "__main__":
@@ -719,7 +791,7 @@ if __name__ == "__main__":
         os.path.join(
             script_dir,
             "..",
-            "OPTIMISED_STRUCTURES",
+            # "OPTIMISED_STRUCTURES",
             args.outdir,
         )
     )

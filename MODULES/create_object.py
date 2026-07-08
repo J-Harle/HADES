@@ -411,7 +411,7 @@ if __name__ == "__main__":
     ncores = resolve_ncores(args.cpus)
 
     outdir = os.path.abspath(
-        os.path.join("OPTIMISED_STRUCTURES", args.outdir)
+        os.path.join(args.outdir)
     )
 
     print(f"Input CSV: {csv_path}")

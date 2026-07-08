@@ -19,30 +19,32 @@ from tqdm import tqdm
 
 
 def parse_args():
-    """Parse command-line arguments.
-
-    Returns
-    -------
-    argparse.Namespace
-        Parsed command-line arguments containing the input path, output CSV path,
-        and requested number of molecules.
-    """
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
         description="Generate substituted molecules for HADES"
     )
 
     parser.add_argument(
         "--input", "-i",
+        dest="output",
         type=str,
-        default=None,
-        help="Optional input file. Currently unused by this generator."
+        default="hades_out.csv",
+        help=(
+            "Output CSV file path for generated molecules. "
+            "This uses -i so the generated file can be passed directly "
+            "as the input to the rest of the HADES workflow."
+        )
     )
 
     parser.add_argument(
         "--output", "-o",
+        dest="output",
         type=str,
-        default="hades_out.csv",
-        help="Output CSV file path"
+        default=None,
+        help=(
+            "Optional alias for the output CSV file path. "
+            "If provided, this overrides the default output path."
+        )
     )
 
     parser.add_argument(
@@ -53,7 +55,6 @@ def parse_args():
     )
 
     return parser.parse_args()
-
 
 RDLogger.DisableLog("rdApp.*")
 
@@ -450,10 +451,14 @@ def write_to_csv(data, output_csv):
 
 # MAIN GENERATION LOOP
 def main():
-    
+
     args = parse_args()
     iteration_count = args.num_molecules
-    output_csv = args.output
+
+    if args.output is None:
+        output_csv = "hades_out.csv"
+    else:
+        output_csv = args.output
 
     max_attempts = 5
     max_total_attempts = iteration_count * 500
