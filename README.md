@@ -23,7 +23,7 @@ Options:
 - `--oxygen-balance` / `-ob` – Calculate the oxygen balance of the `-g` or `-i` molecules.<br>
 - `--enthalpy-of-formation` / `-eof` – Predict the enthalpy of formation for the `-g` or `-i` molecules.<br>
 - `--generic-properties` / `-gprop` – Calculate a large number of properties available in RDKit. <br>
-- `--detonation-properties` / `-det` – Predict the detonation pressure and velocities of all `-g` or `-i`. <br>
+- `--detonation-properties` / `-det` – Predict the detonation pressures and velocities of all `-g` or `-i`. <br>
 
 Example usage: 
 `python hades.py -g 5000 -opt -v -s` <br>
