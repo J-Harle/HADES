@@ -29,7 +29,7 @@ Example usage:
 `python hades.py -g 5000 -opt -v -s` <br>
 This will generate 5000 molecules and optimise, then perform a frequency calculation and subsequently predict the impact sensitivity of the molecules.
 
-##Things to note:
+## Things to note:
 - `-det` requires the enthalpy of formation, and therefore, it must be present in `-i` or must be first calculated with `-eof`.
 - `-s` requires a vibrational spectrum in a custom .txt format, it is highly recommended to use `-v` to calculate them.
 
