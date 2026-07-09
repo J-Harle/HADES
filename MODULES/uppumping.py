@@ -108,7 +108,7 @@ def main():
 
     plotting_script = os.path.join(
         unknowns_dir,
-        "test_unknown_plotting.py"
+        "unknown_plotting.py"
     )
 
     run_script(
