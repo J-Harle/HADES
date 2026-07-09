@@ -66,6 +66,17 @@ def resolve_path(path, base_dir):
     return os.path.abspath(os.path.join(base_dir, path))
 
 
+def count_csv_rows(csv_path):
+    """
+    Count data rows in a CSV so tqdm can show percentage, ETA, and progress.
+    Header row is excluded.
+    """
+    with open(csv_path, "r", encoding="utf-8", newline="") as f:
+        total_lines = sum(1 for _ in f)
+
+    return max(total_lines - 1, 0)
+
+
 def load_json_list(value, default=None):
     """
     Safely load a JSON list from a CSV cell.
@@ -220,6 +231,8 @@ def process_csv_streaming(
 
     temp_output = output_path + ".tmp"
 
+    total_rows = count_csv_rows(input_path)
+
     # =====================================================
     # OPEN INPUT + OUTPUT ONCE
     # =====================================================
@@ -257,7 +270,13 @@ def process_csv_streaming(
         # =================================================
 
         for idx, row in enumerate(
-            tqdm(reader, desc="Calculating Convolutions", unit="molecules "),
+            tqdm(
+                reader,
+                total=total_rows,
+                desc="Calculating Convolutions",
+                unit=" molecule",
+                dynamic_ncols=True
+            ),
             start=1
         ):
 
@@ -304,8 +323,7 @@ def process_csv_streaming(
 
             if idx % save_interval == 0:
                 fout.flush()
-                print(f"\n[INFO] Processed {idx} molecules")
-
+                tqdm.write(f"[INFO] Processed {idx} molecules")
     # =====================================================
     # SAFE REPLACEMENT
     # =====================================================
@@ -321,13 +339,13 @@ if __name__ == "__main__":
 
     args = parse_args()
 
-    print(f"\nProcessing: {args.input}")
-    print(f"Input directory: {os.path.abspath(args.csv_dir)}")
+    # print(f"\nProcessing: {args.input}")
+    # print(f"Input directory: {os.path.abspath(args.csv_dir)}")
 
-    if args.output is None:
-        print("[INFO] Output not provided. Input CSV will be overwritten safely.")
-    else:
-        print(f"Output CSV: {args.output}")
+    # if args.output is None:
+    #     print("[INFO] Output not provided. Input CSV will be overwritten safely.")
+    # else:
+    #     print(f"Output CSV: {args.output}")
 
     process_csv_streaming(
         input_csv=args.input,
@@ -336,4 +354,4 @@ if __name__ == "__main__":
         save_interval=args.save_interval
     )
 
-    print(f"[INFO] Finished: {args.output if args.output else args.input}\n")
+    # print(f"[INFO] Finished: {args.output if args.output else args.input}\n")

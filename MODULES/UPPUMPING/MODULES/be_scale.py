@@ -81,6 +81,17 @@ def resolve_path(path, base_dir):
 
     return os.path.abspath(os.path.join(base_dir, path))
 
+
+def count_csv_rows(csv_path):
+    """
+    Count data rows in a CSV so tqdm can show a proper percentage and ETA.
+    Header row is excluded.
+    """
+    with open(csv_path, "r", encoding="utf-8", newline="") as f:
+        total_lines = sum(1 for _ in f)
+
+    return max(total_lines - 1, 0)
+
 # =========================================================
 # DOS FUNCTIONS
 # =========================================================
@@ -119,7 +130,7 @@ def gaussian_broadening(histogram, bwidth, gwidth):
 
 
 def normalise_dos(dos, atom_count, bwidth, name):
-    area = np.trapz(dos, dx=bwidth)
+    area = np.trapezoid(dos, dx=bwidth)
 
     normalisation_factor = 1
 
@@ -220,7 +231,13 @@ def process_csv_streaming(
     with open(input_path, "r", encoding="utf-8") as fin, \
     open(temp_output, "w", newline="", encoding="utf-8") as fout:
 
+        total_rows = count_csv_rows(input_path)
+
         reader = csv.DictReader(fin)
+
+        if reader.fieldnames is None:
+            raise ValueError(f"[ERROR] No headers found in: {input_path}")
+
         fieldnames = list(reader.fieldnames)
 
         new_cols = ["frequency_axis", "dos", "be_dos",]
@@ -237,8 +254,16 @@ def process_csv_streaming(
         # STREAM ROWS
         # =================================================
 
-        for idx, row in enumerate(tqdm(reader, desc="Calculating DOS", unit="molecules "), start=1):
-
+        for idx, row in enumerate(
+            tqdm(
+                reader,
+                total=total_rows,
+                desc="Calculating DOS",
+                unit=" molecule",
+                dynamic_ncols=True
+            ),
+            start=1
+        ):
             try:
                 frequencies = json.loads(row["frequencies"])
 
@@ -330,13 +355,13 @@ if __name__ == "__main__":
 
     args = parse_args()
 
-    print(f"\nProcessing: {args.input}")
-    print(f"Input directory: {os.path.abspath(args.csv_dir)}")
+    # print(f"\nProcessing: {args.input}")
+    # print(f"Input directory: {os.path.abspath(args.csv_dir)}")
 
-    if args.output is None:
-        print("[INFO] Output not provided. Input CSV will be overwritten safely.")
-    else:
-        print(f"Output CSV: {args.output}")
+    # if args.output is None:
+        # print("[INFO] Output not provided. Input CSV will be overwritten safely.")
+    # else:
+    #     print(f"Output CSV: {args.output}")
 
     process_csv_streaming(
         input_csv=args.input,
@@ -347,4 +372,4 @@ if __name__ == "__main__":
         save_interval=args.save_interval
     )
 
-    print(f"[INFO] Finished: {args.output if args.output else args.input}\n")
+    # print(f"[INFO] Finished: {args.output if args.output else args.input}\n")

@@ -108,7 +108,7 @@ def process_csv_streaming(csv_path):
     # ==========================================
 
     os.replace(temp_path, input_path)
-    print(f"[INFO] Updated CSV written: {input_path}")
+    # print(f"[INFO] Updated CSV written: {input_path}")
 
 # =========================================================
 # MAIN
@@ -127,8 +127,8 @@ if __name__ == "__main__":
 
     raw_csv_path = os.path.join(script_dir, raw_csv_name)
 
-    print(f"\nProcessing: {raw_csv_path}")
+    # print(f"\nProcessing: {raw_csv_path}")
 
     process_csv_streaming(raw_csv_path)
 
-    print()
+    # print()

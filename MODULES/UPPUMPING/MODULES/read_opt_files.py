@@ -68,18 +68,23 @@ def read_extended_csv(
         reader.fieldnames = [h.strip() if h is not None else h for h in reader.fieldnames]
         headers = reader.fieldnames
 
-        # Prefer FILENAME, fallback to CID
-        if "FILENAME" in headers:
-            id_column = "FILENAME"
-        elif "CID" in headers:
-            id_column = "CID"
-        else:
+        # Prefer FILENAME, then CID, then molecule/MOLECULE
+        id_candidates = ["FILENAME", "CID", "molecule", "MOLECULE"]
+
+        id_column = None
+        for candidate in id_candidates:
+            if candidate in headers:
+                id_column = candidate
+                break
+
+        if id_column is None:
             raise ValueError(
-                f"[ERROR] Neither 'FILENAME' nor 'CID' column found in {csv_filename}. "
+                f"[ERROR] No valid ID column found in {csv_filename}. "
+                f"Expected one of {id_candidates}. "
                 f"Available columns: {headers}"
             )
-
-        print(f"[INFO] Using ID column: {id_column}")
+        
+        # print(f"[INFO] Using ID column: {id_column}")
 
         has_mol_type = "MOL_TYPE" in headers
 
@@ -429,4 +434,4 @@ if __name__ == "__main__":
         save_interval=1000
     )
 
-    print(f"[INFO] Finished writing: {output_name}\n")
+    # print(f"[INFO] Finished writing: {output_name}\n")

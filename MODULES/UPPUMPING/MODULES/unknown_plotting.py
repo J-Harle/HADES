@@ -97,6 +97,17 @@ def resolve_path(path, base_dir):
     return os.path.abspath(os.path.join(base_dir, path))
 
 
+def count_csv_rows(csv_path):
+    """
+    Count data rows in a CSV so tqdm can show percentage, ETA, and progress.
+    Header row is excluded.
+    """
+    with open(csv_path, "r", encoding="utf-8", newline="") as f:
+        total_lines = sum(1 for _ in f)
+
+    return max(total_lines - 1, 0)
+
+
 def default_prediction_output(input_csv):
     """
     Create a safe default output name.
@@ -125,6 +136,8 @@ def read_prediction_data(input_csv, csv_dir="."):
     if not os.path.isfile(csv_path):
         raise FileNotFoundError(f"[ERROR] CSV not found: {csv_path}")
 
+    total_rows = count_csv_rows(csv_path)
+
     data = []
 
     with open(csv_path, "r", encoding="utf-8", newline="") as f:
@@ -138,8 +151,10 @@ def read_prediction_data(input_csv, csv_dir="."):
 
         for row in tqdm(
             reader,
+            total=total_rows,
             desc=f"Reading {os.path.basename(csv_path)}",
-            unit=" molecules"
+            unit=" molecule",
+            dynamic_ncols=True
         ):
 
             try:
@@ -172,7 +187,7 @@ def read_prediction_data(input_csv, csv_dir="."):
                 })
 
             except Exception as e:
-                print(f"[WARN] Failed row: {e}")
+                tqdm.write(f"[WARN] Failed row: {e}")
 
     return data, fieldnames
 
@@ -347,9 +362,9 @@ def plot_final(all_data, dpi=100, save_path=None):
 
 def predict_h50(all_data, a, b):
 
-    print("\nPredicted impact sensitivities")
-    print("-" * 70)
-    print(f"{'Molecule':<30} {'Predicted H50 / J':>20}")
+    # print("\nPredicted impact sensitivities")
+    # print("-" * 70)
+    # print(f"{'Molecule':<30} {'Predicted H50 / J':>20}")
 
     for mol in tqdm(
         all_data,
@@ -394,10 +409,10 @@ if __name__ == "__main__":
     else:
         output_csv = args.output
 
-    print(f"\nProcessing: {args.input}")
-    print(f"Input directory: {csv_dir}")
-    print(f"Output CSV: {output_csv}")
-    print(f"[INFO] Using manual fit: y = ({args.a}) * (1/H50) + ({args.b})")
+    # print(f"\nProcessing: {args.input}")
+    # print(f"Input directory: {csv_dir}")
+    # print(f"Output CSV: {output_csv}")
+    # print(f"[INFO] Using manual fit: y = ({args.a}) * (1/H50) + ({args.b})")
 
     # ==========================================
     # LOAD DATA
@@ -429,6 +444,6 @@ if __name__ == "__main__":
         csv_dir=csv_dir
     )
 
-    print(f"\n[INFO] CSV writing complete: {output_path}")
+    # print(f"\n[INFO] CSV writing complete: {output_path}")
 
     del unknown_data
