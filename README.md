@@ -1,5 +1,6 @@
 <img width="1254" height="1254" alt="logo" src="https://github.com/user-attachments/assets/324c25e5-314d-4eaa-90b7-ac1ea672e600" />
-# HADES
+
+## HADES
 High-throughput Analysis for the Design of Energetic Systems
 
 ## Installation
