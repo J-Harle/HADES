@@ -40,5 +40,6 @@ This will generate 5000 molecules and optimise, then perform a frequency calcula
 - Add GPU support for -opt
 - Add CLI support for -s
 
-
+## Other Information:
 ** HADES logo was generated using ChatGPT's Images 2.0 software
+** The docstrings seen in this software were generated using ChatGPT 5.6 Sol, with high intellegence
