@@ -39,3 +39,6 @@ This will generate 5000 molecules and optimise, then perform a frequency calcula
 - For -opt add a choice of MACE model size / program to use (Can only use ASE supported programs), this will also need to be passed to -eof and -v
 - Add GPU support for -opt
 - Add CLI support for -s
+
+
+** HADES logo was generated using ChatGPT's Images 2.0 software
