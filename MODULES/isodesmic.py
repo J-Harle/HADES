@@ -798,7 +798,7 @@ if __name__ == "__main__":
 
     ref_csv_path = os.path.join(
         script_dir,
-        "EOF",
+        "TOOLS",
         "isodesmic.csv",
     )
 
