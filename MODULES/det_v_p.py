@@ -727,7 +727,7 @@ if __name__ == "__main__":
     model_path = os.path.join(
         script_dir,
         "TOOLS", 
-        "test_direct_gbt_density_model.pkl",
+        "gbt_density_model.pkl",
     )
 
     density_model, density_feature_names = load_density_model(
