@@ -1,131 +1,59 @@
-"""
-Calculate density and Kamlet-Jacobs detonation properties.
-
-This script reads a CSV containing molecule IDs, SMILES strings, and enthalpies
-of formation. For each molecule, it reads the corresponding optimised XYZ
-structure, predicts crystal density using a trained density model, calculates
-Kamlet-Jacobs detonation velocity and pressure, optionally writes density
-scaling plots, and appends the results back to the input CSV.
-"""
 import os
 import csv
-import re as _re
 import joblib
 import numpy as np
 import matplotlib.pyplot as plt
-import argparse
+
 from collections import Counter
 from tqdm import tqdm
+
 from rdkit import Chem
-from rdkit.Chem import (
-    AllChem,
-    Descriptors,
-    Lipinski,
-    Crippen,
-    rdMolDescriptors,
-)
+from rdkit.Chem import AllChem, Descriptors
 
-# ARGPARSE
 
-def parse_args():
-    """Parse command-line arguments.
+# =========================================================
+# DENSITY MODEL FEATURE DEFINITIONS
+# =========================================================
 
-    Returns
-    -------
-    argparse.Namespace
-        Parsed command-line arguments containing the input CSV path, optimised
-        structure directory name, and plot-control option.
-    """
-    parser = argparse.ArgumentParser(
-        description="Calculate density and Kamlet-Jacobs detonation properties"
-    )
+# These are the features used by the density-model training script.
+# The feature order must remain identical to the order used for training.
+DEFAULT_DENSITY_FEATURE_NAMES = [
+    "MolecularDensity",
+    "NumHAcceptors",
+    "NumHDonors",
+    "Phi",
+    "NumAromaticRings",
+    "TPSA",
+    "MolLogP",
+    "MaxAbsPartialCharge",
+    "MinAbsPartialCharge",
+    "NumAliphaticRings",
+]
 
-    parser.add_argument(
-        "--input", "-i",
-        type=str,
-        required=True,
-        help="Input CSV file containing CID, SMILES, and Hf /kJmol-1 columns"
-    )
+DESCRIPTOR_LIBRARY = dict(Descriptors.descList)
 
-    parser.add_argument(
-        "--outdir", "-dir",
-        type=str,
-        default="HADES",
-        help=(
-            "Name of subdirectory inside OPTIMISED_STRUCTURES containing "
-            "optimised molecule folders. Default: HADES"
-        )
-    )
 
-    parser.add_argument(
-        "--no-plots",
-        action="store_true",
-        help="Do not create density scaling plots"
-    )
-
-    return parser.parse_args()
-
-def find_id_column(headers):
-    """Find molecule ID column using preferred fallback order."""
-    id_column_priority = ["CID", "FILENAME", "molecule", "MOLECULE"]
-
-    for col in id_column_priority:
-        if col in headers:
-            return col
-
-    raise ValueError(
-        "[ERROR] No molecule ID column found. "
-        f"Expected one of {id_column_priority}. "
-        f"Available columns: {headers}"
-    )
-
+# =========================================================
+# READ CSV
+# =========================================================
 
 def read_csv(csv_path):
-    """Read molecule data from the input CSV."""
     data = []
 
-    with open(csv_path, "r", newline="") as f:
+    with open(csv_path, "r") as f:
         reader = csv.DictReader(f)
 
-        if reader.fieldnames is None:
-            raise ValueError(f"[ERROR] No headers found in CSV: {csv_path}")
-
-        # Strip whitespace from headers
-        reader.fieldnames = [
-            h.strip() if h is not None else h
-            for h in reader.fieldnames
-        ]
-
-        headers = reader.fieldnames
-        id_column = find_id_column(headers)
-
-        required_cols = ["SMILES", "Hf /kJmol-1"]
-        for col in required_cols:
-            if col not in headers:
-                raise ValueError(
-                    f"[ERROR] Required column '{col}' not found in CSV. "
-                    f"Available columns: {headers}"
-                )
-
-        print(f"Using molecule ID column: {id_column}")
-
         for row in reader:
-            mol_id = row.get(id_column, "").strip()
-            eof_val = row.get("Hf /kJmol-1", "").strip()
-
-            if not mol_id:
-                print(f"[WARNING] Missing molecule ID in column {id_column}")
-                continue
+            eof_val = row["Hf /kJmol-1"].strip()
 
             if not eof_val:
-                print(f"[WARNING] Missing EOF for {id_column} {mol_id}")
+                print(f"[WARNING] Missing EOF for CID {row['CID']}")
                 continue
 
             mol = {
-                "smiles": row["SMILES"].strip(),
+                "smiles": row["SMILES"],
                 "eof": float(eof_val),
-                "cid": mol_id,          # keep this key so the rest of the script works
-                "id_column": id_column, # useful for writing/debugging
+                "cid": row["CID"],
             }
 
             data.append(mol)
@@ -133,185 +61,167 @@ def read_csv(csv_path):
     return data
 
 
+# =========================================================
 # LOAD DENSITY MODEL
+# =========================================================
+
 def load_density_model(model_path):
-    """Load the trained density model from disk.
+    if not os.path.isfile(model_path):
+        raise FileNotFoundError(
+            f"[ERROR] Density model not found: {model_path}"
+        )
 
-    The model file may either contain a dictionary with a fitted model and
-    feature names, or a fitted model object directly.
-
-    Parameters
-    ----------
-    model_path : str
-        Path to the saved joblib density model.
-
-    Returns
-    -------
-    tuple[object, list[str] or None]
-        Fitted density model and optional feature-name list.
-    """
     bundle = joblib.load(model_path)
 
     if isinstance(bundle, dict):
+        if "model" not in bundle:
+            raise KeyError(
+                "[ERROR] Model bundle does not contain a 'model' entry."
+            )
+
         model = bundle["model"]
         feature_names = bundle.get("feature_names")
+    else:
+        # Fallback for a model saved directly rather than inside a bundle.
+        model = bundle
+        feature_names = None
 
-        print("\nLoaded density model")
-        print("Model type:", type(model))
+    if feature_names is None:
+        print(
+            "[WARNING] No feature_names were stored with the model. "
+            "Using the feature order from the current training script."
+        )
+        feature_names = DEFAULT_DENSITY_FEATURE_NAMES.copy()
+    else:
+        feature_names = list(feature_names)
 
-        return model, feature_names
+    unsupported_features = [
+        feature_name
+        for feature_name in feature_names
+        if (
+            feature_name != "MolecularDensity"
+            and feature_name not in DESCRIPTOR_LIBRARY
+        )
+    ]
 
-    # fallback if you ever save only the model directly
+    if unsupported_features:
+        raise ValueError(
+            "[ERROR] The density model contains unsupported features: "
+            f"{unsupported_features}"
+        )
+
+    model_feature_count = getattr(model, "n_features_in_", None)
+
+    if (
+        model_feature_count is not None
+        and model_feature_count != len(feature_names)
+    ):
+        raise ValueError(
+            "[ERROR] Saved feature-name count does not match the model: "
+            f"{len(feature_names)} names, but the model expects "
+            f"{model_feature_count} features."
+        )
+
     print("\nLoaded density model")
-    print("Model type:", type(bundle))
+    print("Model path:", model_path)
+    print("Model type:", type(model))
+    print("Model features:")
 
-    return bundle, None
+    for index, feature_name in enumerate(feature_names, start=1):
+        print(f"  {index:2d}. {feature_name}")
+
+    return model, feature_names
 
 
+# =========================================================
 # BUILD DENSITY MODEL FEATURES
-def build_density_model_features(smiles, base_density):
+# =========================================================
+
+def build_density_model_features(
+    smiles,
+    molecular_density,
+    feature_names,
+):
     """
-    Build the same feature vector used during training.
+    Build one prediction row using the feature names saved with the model.
 
-    Feature order must match:
-
-        [
-            "base_density",
-            "base_density_sq",
-            "n_N",
-            "n_O",
-            "n_C",
-            "n_heavy",
-            "n_heavy_sq",
-            "N_fraction",
-            "N_fraction_sq",
-            "O_fraction",
-            "has_aromatic",
-            "has_nitro",
-            "ring_count",
-            "TPSA",
-            "MolLogP",
-            "MolMR",
-            "HeavyAtomCount",
-            "NumHDonors",
-            "NumHAcceptors",
-        ]
+    The training script uses MolecularDensity first, followed by the selected
+    RDKit descriptors. Iterating over the stored names guarantees that the
+    prediction feature order is identical to the training feature order.
     """
-
     mol = Chem.MolFromSmiles(smiles)
 
     if mol is None:
         return None
 
-    mol_h = Chem.AddHs(mol)
+    feature_values = []
 
-    # Same hand-crafted features as training script
-    n_N = len(_re.findall(r'N(?![a-z])', smiles))
-    n_O = len(_re.findall(r'O(?![a-z])', smiles))
-    n_C = len(_re.findall(r'C(?![a-z])', smiles))
+    for feature_name in feature_names:
+        if feature_name == "MolecularDensity":
+            feature_value = molecular_density
+        else:
+            descriptor_function = DESCRIPTOR_LIBRARY.get(feature_name)
 
-    n_heavy = n_N + n_O + n_C
+            if descriptor_function is None:
+                print(
+                    f"[ERROR] RDKit descriptor is unavailable: "
+                    f"{feature_name}"
+                )
+                return None
 
-    N_frac = n_N / max(n_heavy, 1)
-    O_frac = n_O / max(n_heavy, 1)
+            try:
+                feature_value = float(descriptor_function(mol))
+            except Exception as exc:
+                print(
+                    f"[ERROR] Could not calculate {feature_name} "
+                    f"for {smiles}: {exc}"
+                )
+                return None
 
-    has_aromatic = int("c" in smiles)
+        if not np.isfinite(feature_value):
+            print(
+                f"[ERROR] Non-finite density feature "
+                f"{feature_name} for {smiles}: {feature_value}"
+            )
+            return None
 
-    # This only detects nitro written as N(=O)=O.
-    has_nitro = int(
-        bool(_re.search(r'N\(=O\)=O', smiles))
-    )
+        feature_values.append(float(feature_value))
 
-    ring_count = (
-        smiles.count("1") +
-        smiles.count("2") +
-        smiles.count("3")
-    )
-
-    # Same selected RDKit descriptors as training script
-    TPSA = rdMolDescriptors.CalcTPSA(mol_h)
-    MolLogP = Crippen.MolLogP(mol_h)
-    MolMR = Crippen.MolMR(mol_h)
-    HeavyAtomCount = Lipinski.HeavyAtomCount(mol_h)
-    NumHDonors = Lipinski.NumHDonors(mol_h)
-    NumHAcceptors = Lipinski.NumHAcceptors(mol_h)
-
-    X = np.array([[
-        base_density,
-        base_density ** 2,
-
-        n_N,
-        n_O,
-        n_C,
-
-        n_heavy,
-        n_heavy ** 2,
-
-        N_frac,
-        N_frac ** 2,
-
-        O_frac,
-
-        has_aromatic,
-        has_nitro,
-
-        ring_count,
-
-        TPSA,
-        MolLogP,
-        MolMR,
-        HeavyAtomCount,
-        NumHDonors,
-        NumHAcceptors,
-    ]], dtype=float)
-
-    return X
+    return np.asarray([feature_values], dtype=float)
 
 
+# =========================================================
 # CALCULATE DENSITY USING ML MODEL
+# =========================================================
+
 def calc_density(
     xyz_path,
     data,
     density_model,
-    density_feature_names=None,
+    density_feature_names,
 ):
-    """Calculate molecular density using an optimised XYZ and ML model.
-
-        The function calculates molecular weight from SMILES, molecular volume from
-        the optimised XYZ structure, forms the trained model feature vector, predicts
-        density, and stores density-related values in the molecule dictionary.
-
-        Parameters
-        ----------
-        xyz_path : str
-            Path to the optimised XYZ file.
-        data : dict
-            Molecule dictionary containing at least `smiles` and `cid`.
-        density_model : object
-            Fitted model with a `.predict()` method.
-        density_feature_names : list[str] or None, optional
-            Optional list of expected model feature names.
-
-        Returns
-        -------
-        dict or None
-            Updated molecule dictionary if successful. Returns None if parsing,
-            volume calculation, feature generation, or prediction fails.
-        """
     smiles = data.get("smiles")
     cid = data.get("cid")
 
-    # SMILES → molecular weight
+    # --------------------------------------------------
+    # SMILES -> molecular weight
+    # --------------------------------------------------
     mol_smiles = Chem.MolFromSmiles(smiles)
 
     if mol_smiles is None:
         print(f"[ERROR] Invalid SMILES for {cid}")
         return None
 
-    mol_smiles_h = Chem.AddHs(mol_smiles)
-    mw = Descriptors.MolWt(mol_smiles_h)
+    # This matches the molecular-weight calculation in the training script.
+    mw = float(Descriptors.MolWt(mol_smiles))
 
-    # XYZ → molecular volume
+    # --------------------------------------------------
+    # XYZ -> molecular volume
+    # --------------------------------------------------
+    if not os.path.isfile(xyz_path):
+        print(f"[ERROR] XYZ file not found for {cid}: {xyz_path}")
+        return None
+
     mol_xyz = Chem.MolFromXYZFile(xyz_path)
 
     if mol_xyz is None:
@@ -319,81 +229,90 @@ def calc_density(
         return None
 
     try:
-        Chem.SanitizeMol(mol_xyz)
-    except Exception as e:
-        print(f"[ERROR] Failed to sanitise {xyz_path}: {e}")
+        volume = float(AllChem.ComputeMolVolume(mol_xyz))
+    except Exception as exc:
+        print(f"[ERROR] Failed to compute volume for {cid}: {exc}")
         return None
 
-    try:
-        volume = AllChem.ComputeMolVolume(mol_xyz)
-    except Exception as e:
-        print(f"[ERROR] Failed to compute volume for {cid}: {e}")
+    if not np.isfinite(volume) or volume <= 0.0:
+        print(f"[ERROR] Invalid volume for {cid}: {volume}")
         return None
 
-    if volume is None or volume <= 0:
-        print(f"[ERROR] Invalid volume for {cid}")
+    # --------------------------------------------------
+    # Molecular density used as the first model feature
+    # --------------------------------------------------
+    molecular_density = mw / volume
+
+    if not np.isfinite(molecular_density) or molecular_density <= 0.0:
+        print(
+            f"[ERROR] Invalid molecular density for {cid}: "
+            f"{molecular_density}"
+        )
         return None
 
-    # Base molecular density
-    base_density = mw / volume
-
-    # Build ML feature array
+    # --------------------------------------------------
+    # Build the feature row in the saved model order
+    # --------------------------------------------------
     X = build_density_model_features(
         smiles,
-        base_density,
+        molecular_density,
+        density_feature_names,
     )
 
     if X is None:
         print(f"[ERROR] Could not build density features for {cid}")
         return None
 
-    # check against saved feature names
-    if density_feature_names is not None:
-        if X.shape[1] != len(density_feature_names):
-            print(
-                f"[ERROR] Feature mismatch for {cid}: "
-                f"X has {X.shape[1]} features, "
-                f"model expects {len(density_feature_names)}"
-            )
-            return None
-
-    # Predict density
-    try:
-        density = float(density_model.predict(X)[0])
-    except Exception as e:
-        print(f"[ERROR] Density prediction failed for {cid}: {e}")
+    if X.shape[1] != len(density_feature_names):
+        print(
+            f"[ERROR] Feature mismatch for {cid}: "
+            f"X has {X.shape[1]} features, but the model bundle "
+            f"contains {len(density_feature_names)} feature names."
+        )
         return None
 
+    model_feature_count = getattr(density_model, "n_features_in_", None)
+
+    if (
+        model_feature_count is not None
+        and X.shape[1] != model_feature_count
+    ):
+        print(
+            f"[ERROR] Feature mismatch for {cid}: "
+            f"X has {X.shape[1]} features, but the model expects "
+            f"{model_feature_count}."
+        )
+        return None
+
+    # --------------------------------------------------
+    # Predict density
+    # --------------------------------------------------
+    try:
+        density = float(density_model.predict(X)[0])
+    except Exception as exc:
+        print(f"[ERROR] Density prediction failed for {cid}: {exc}")
+        return None
+
+    if not np.isfinite(density):
+        print(f"[ERROR] Non-finite density prediction for {cid}: {density}")
+        return None
+
+    # --------------------------------------------------
     # Store results
+    # --------------------------------------------------
     data["density"] = density
-    data["base_density"] = base_density
+    data["base_density"] = molecular_density
     data["mw"] = mw
     data["volume"] = volume
 
     return data
 
 
+# =========================================================
 # CALCULATE GAS PRODUCTS
+# =========================================================
+
 def calc_gas_products(data):
-    """Calculate detonation products and heat-release parameters.
-
-    Product stoichiometry follows the oxygen-priority scheme used in the script:
-    hydrogen is oxidised to water first, remaining oxygen forms carbon dioxide,
-    and any remaining carbon is assigned as solid carbon. If oxygen is
-    insufficient for all hydrogen, excess hydrogen is assigned as hydrogen gas.
-
-    Parameters
-    ----------
-    data : dict
-        Molecule dictionary containing SMILES, molecular weight, CID, and
-        enthalpy of formation.
-
-    Returns
-    -------
-    dict
-        Updated molecule dictionary containing gas products, gas moles per gram,
-        average gas molecular mass, reaction product enthalpy, and Q.
-    """
     smiles = data.get("smiles")
 
     if smiles is None:
@@ -526,27 +445,18 @@ def calc_gas_products(data):
     return data
 
 
+# =========================================================
 # CALCULATE PHI
+# =========================================================
+
 def calc_phi(data):
-    """Calculate the Kamlet-Jacobs phi term.
+    """
+    Phi = N * sqrt(M) * sqrt(Q)
 
-    Phi is defined as:
-
-    `phi = N * sqrt(M) * sqrt(Q)`
-
-    where `N` is moles of gaseous product per gram of explosive, `M` is average
-    molecular mass of gaseous products, and `Q` is the chemical energy of
-    detonation.
-
-    Parameters
-    ----------
-    data : dict
-        Molecule dictionary containing `N`, `M`, `Q`, and `cid`.
-
-    Returns
-    -------
-    dict
-        Updated molecule dictionary containing `phi`.
+    Where:
+        N = moles of gaseous product per gram of explosive
+        M = average molecular mass of gaseous products
+        Q = chemical energy of detonation reaction
     """
 
     N = data.get("N")
@@ -569,24 +479,13 @@ def calc_phi(data):
     return data
 
 
+# =========================================================
 # DETONATION VELOCITY
+# =========================================================
+
 def det_v(data):
-    """Calculate Kamlet-Jacobs detonation velocity.
-
-    The velocity is calculated as:
-
-    `D / km s-1 = 1.01 * sqrt(phi) * (1 + 1.3 * rho)`
-
-    Parameters
-    ----------
-    data : dict
-        Molecule dictionary containing `phi`, `density`, and `cid`.
-
-    Returns
-    -------
-    dict
-        Updated molecule dictionary containing detonation velocity under the
-        `d` key.
+    """
+    D / km s-1 = 1.01 * sqrt(phi) * (1 + 1.3*rho)
     """
 
     phi = data.get("phi")
@@ -607,24 +506,13 @@ def det_v(data):
     return data
 
 
+# =========================================================
 # DETONATION PRESSURE
+# =========================================================
+
 def det_p(data):
-    """Calculate Kamlet-Jacobs detonation pressure.
-
-    The pressure is calculated as:
-
-    `P / GPa = 1.558 * phi * rho^2`
-
-    Parameters
-    ----------
-    data : dict
-        Molecule dictionary containing `phi`, `density`, and `cid`.
-
-    Returns
-    -------
-    dict
-        Updated molecule dictionary containing detonation pressure under the
-        `p` key.
+    """
+    P / GPa = 1.558 * phi * rho^2
     """
 
     phi = data.get("phi")
@@ -645,36 +533,15 @@ def det_p(data):
     return data
 
 
+# =========================================================
 # WRITE RESULTS BACK TO CSV
+# =========================================================
+
 def write_to_csv(csv_path, results):
-    """Write calculated density and detonation results back to the CSV.
-
-    Existing rows are matched by CID. New result columns are added if they do
-    not already exist.
-
-    Parameters
-    ----------
-    csv_path : str
-        Path to the input CSV file to update.
-    results : list[dict]
-        List of processed molecule dictionaries containing calculated density
-        and Kamlet-Jacobs values.
-    """
-    with open(csv_path, "r", newline="") as f:
+    with open(csv_path, "r") as f:
         reader = csv.DictReader(f)
-
-        if reader.fieldnames is None:
-            raise ValueError(f"[ERROR] No headers found in CSV: {csv_path}")
-
-        reader.fieldnames = [
-            h.strip() if h is not None else h
-            for h in reader.fieldnames
-        ]
-
-        fieldnames = reader.fieldnames
-        id_column = find_id_column(fieldnames)
-
         rows = list(reader)
+        fieldnames = reader.fieldnames if reader.fieldnames else []
 
     new_fields = [
         "density / gcm-3",
@@ -689,15 +556,15 @@ def write_to_csv(csv_path, results):
             fieldnames.append(field)
 
     results_map = {
-        str(mol["cid"]): mol
+        mol["cid"]: mol
         for mol in results
     }
 
     for row in rows:
-        mol_id = row.get(id_column, "").strip()
+        cid = row["CID"]
 
-        if mol_id in results_map:
-            mol = results_map[mol_id]
+        if cid in results_map:
+            mol = results_map[cid]
 
             row["density / gcm-3"] = mol.get("density")
             row["base_density / gcm-3"] = mol.get("base_density")
@@ -715,32 +582,17 @@ def write_to_csv(csv_path, results):
         writer.writerows(rows)
 
 
+# =========================================================
 # CREATE SCALING PLOTS
+# =========================================================
+
 def create_scaling_plot(data, output_dir=None, show=False):
-    """Create density-scaling plots for detonation velocity and pressure.
+    """
+    Creates scaling plots for detonation velocity and pressure
+    by scaling the density using gamma.
 
-    The density is scaled using a factor gamma:
-
-    - gamma = 0 gives rho = 0
-    - gamma = 1 gives the original predicted density
-
-    The scaled density is then used to recalculate detonation velocity and
-    pressure.
-
-    Parameters
-    ----------
-    data : dict
-        Molecule dictionary containing `cid`, `density`, and `phi`.
-    output_dir : str or None, optional
-        Directory where plots should be saved. If None, plots are not saved.
-    show : bool, optional
-        Whether to display plots interactively. Default is False.
-
-    Returns
-    -------
-    list[str] or None
-        Paths to saved plot files if successful. Returns None if density or phi
-        is missing or invalid.
+    gamma = 0 gives rho = 0
+    gamma = 1 gives the original predicted density
     """
 
     cid = data.get("cid", "unknown")
@@ -778,7 +630,9 @@ def create_scaling_plot(data, output_dir=None, show=False):
 
     saved_files = []
 
+    # --------------------------------------------------
     # Detonation velocity plot
+    # --------------------------------------------------
     plt.figure(figsize=(7, 5))
 
     plt.plot(
@@ -810,7 +664,9 @@ def create_scaling_plot(data, output_dir=None, show=False):
 
     plt.close()
 
+    # --------------------------------------------------
     # Detonation pressure plot
+    # --------------------------------------------------
     plt.figure(figsize=(7, 5))
 
     plt.plot(
@@ -845,52 +701,49 @@ def create_scaling_plot(data, output_dir=None, show=False):
     return saved_files
 
 
+# =========================================================
 # MAIN
+# =========================================================
+
 if __name__ == "__main__":
 
-    args = parse_args()
-
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    parent_dir = os.path.abspath(os.path.join(script_dir, ".."))
 
-    # Input CSV
-    csv_path = os.path.abspath(args.input)
+    # --------------------------------------------------
+    # Input CSV and XYZ directory
+    # --------------------------------------------------
+    csv_path = os.path.join(script_dir, "..", "large_data.csv",)
+    xyz_dir = os.path.join(script_dir, "..", "OPTIMISED_STRUCTURES", "LARGE_DATASET",)
 
-    # Optimised structure directory
-    xyz_dir = os.path.abspath(
-        os.path.join(
-            parent_dir,
-            "OPTIMISED_STRUCTURES",
-            args.outdir,
-        )
-    )
+    # csv_path = os.path.join(script_dir, "..", "30_bench.csv")
+    # xyz_dir = os.path.join(script_dir, "..", "OPTIMISED_STRUCTURES", "30_MOL")
 
+    # csv_path = os.path.join(script_dir, "..", "bak_30_bench.csv")
+    # xyz_dir = os.path.join(script_dir, "..", "OPTIMISED_STRUCTURES", "DET_V_P_TEST")
+
+    # --------------------------------------------------
     # Density model
+    # --------------------------------------------------
     model_path = os.path.join(
         script_dir,
-        "TOOLS",
-        "direct_gbt_density_model.pkl",
+        "TOOLS", 
+        "test_direct_gbt_density_model.pkl",
     )
-
-    if not os.path.exists(model_path):
-        raise FileNotFoundError(
-            f"Density model not found: {model_path}"
-        )
-
-    print(f"Input CSV: {csv_path}")
-    print(f"Optimised structure directory: {xyz_dir}")
-    print(f"Density model: {model_path}")
 
     density_model, density_feature_names = load_density_model(
         model_path,
     )
 
+    # --------------------------------------------------
     # Read molecules
+    # --------------------------------------------------
     data = read_csv(csv_path)
 
     results = []
 
+    # --------------------------------------------------
     # Process molecules
+    # --------------------------------------------------
     for mol in tqdm(data, desc="Processing molecules"):
 
         cid = mol["cid"]
@@ -900,10 +753,6 @@ if __name__ == "__main__":
             f"{cid}",
             f"{cid}.xyz",
         )
-
-        if not os.path.exists(xyz_path):
-            print(f"[WARNING] Missing XYZ for {cid}: {xyz_path}")
-            continue
 
         mol = calc_density(
             xyz_path,
@@ -920,21 +769,22 @@ if __name__ == "__main__":
         mol = det_v(mol)
         mol = det_p(mol)
 
-        if not args.no_plots:
-            plot_dir = os.path.join(
-                xyz_dir,
-                cid,
-            )
+        plot_dir = os.path.join(
+            xyz_dir,
+            cid,
+        )
 
-            create_scaling_plot(
-                mol,
-                output_dir=plot_dir,
-                show=False,
-            )
+        create_scaling_plot(
+            mol,
+            output_dir=plot_dir,
+            show=False,
+        )
 
         results.append(mol)
 
+    # --------------------------------------------------
     # Write results
+    # --------------------------------------------------
     write_to_csv(
         csv_path,
         results,
