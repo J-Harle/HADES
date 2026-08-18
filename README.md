@@ -40,6 +40,9 @@ This will generate 5000 molecules and optimise, then perform a frequency calcula
 - Add GPU support for -opt
 - Add CLI support for -s
 - Add Higher level reactions for EOF
+	- Requires rename of module
+	- Update hades.py to call new module name
+	- Add a new arg to decide "level of theory", default to isodesmic
 
 ## Other Information:
 ** HADES logo was generated using ChatGPT's Images 2.0 software <br>
