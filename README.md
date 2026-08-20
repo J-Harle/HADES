@@ -38,7 +38,6 @@ This will generate 5000 molecules and optimise, then perform a frequency calcula
 ## Todo:
 - For -opt add a choice of MACE model size / program to use (Can only use ASE supported programs), this will also need to be passed to -eof and -v
 - Add GPU support for -opt
-- Add CLI support for -s
 - Add Higher level reactions for EOF
 	- Requires rename of module
 	- Update hades.py to call new module name
