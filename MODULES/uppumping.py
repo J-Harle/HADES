@@ -25,8 +25,8 @@ def parse_args():
 
 
 def run_script(command, script_name, cwd=None):
-    print("\nRunning command:")
-    print(" ".join(command))
+    # print("\nRunning command:")
+    # print(" ".join(command))
 
     result = subprocess.run(command, cwd=cwd)
 
@@ -37,13 +37,15 @@ def run_script(command, script_name, cwd=None):
 
 def main():
     args = parse_args()
+
     arg_modules_dir = os.path.dirname(os.path.abspath(__file__))
+
     project_dir = os.path.dirname(arg_modules_dir)
 
     unknowns_dir = os.path.join(
         arg_modules_dir,
         "UPPUMPING",
-        "MODULES"
+#        "UNKNOWNS"
     )
 
     def resolve_project_path(path):
@@ -61,13 +63,16 @@ def main():
         f"{input_stem}_raw.csv"
     )
 
-    print("\nUPPUMPING settings")
-    print("-" * 40)
-    print(f"Input CSV: {input_csv}")
-    print(f"Optimised structure directory: {base_dir}")
-    print(f"Raw UPPUMPING CSV: {raw_csv}")
-    print("-" * 40)
+    # print("\nUPPUMPING settings")
+    # print("-" * 40)
+    # print(f"Input CSV: {input_csv}")
+    # print(f"Optimised structure directory: {base_dir}")
+    # print(f"Raw UPPUMPING CSV: {raw_csv}")
+    # print("-" * 40)
 
+    # ---------------------------------------------------------
+    # 1. Read optimised files and create *_raw.csv
+    # ---------------------------------------------------------
 
     read_opt_files_script = os.path.join(
         unknowns_dir,
@@ -85,7 +90,11 @@ def main():
         "read_opt_files.py",
         cwd=unknowns_dir
     )
-    
+
+    # ---------------------------------------------------------
+    # 2. Process the raw CSV through the UPPUMPING workflow
+    # ---------------------------------------------------------
+
     processing_scripts = [
         "omax.py",
         "be_scale.py",
@@ -105,6 +114,10 @@ def main():
             script,
             cwd=unknowns_dir
         )
+
+    # ---------------------------------------------------------
+    # 3. Predict/write impact sensitivity back to original CSV
+    # ---------------------------------------------------------
 
     plotting_script = os.path.join(
         unknowns_dir,

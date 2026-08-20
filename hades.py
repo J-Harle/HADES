@@ -234,7 +234,7 @@ def main():
             f"Generating {args.generate} molecules",
             [
                 sys.executable,
-                os.path.join(project_dir, "ARG_MODULES", "substitution.py"),
+                os.path.join(project_dir, "MODULES", "substitution.py"),
                 "-i", args.input or "none",
                 "-o", args.output,
                 "-n", str(args.generate)
@@ -246,7 +246,7 @@ def main():
             "Optimising molecules",
             [
                 sys.executable,
-                os.path.join(project_dir, "ARG_MODULES", "create_object.py"),
+                os.path.join(project_dir, "MODULES", "create_object.py"),
                 "-i", active_input,
                 "--outdir", args.outdir,
                 "-c", str(args.cpus)
@@ -258,7 +258,7 @@ def main():
             "Calculating vibrations",
             [
                 sys.executable,
-                os.path.join(project_dir, "ARG_MODULES", "vibration.py"),
+                os.path.join(project_dir, "MODULES", "vibration.py"),
                 "-i", active_input,
                 "-dir", args.outdir,
                 "-c", str(args.cpus)
@@ -270,7 +270,7 @@ def main():
             "Predicting impact sensitivity",
             [
                 sys.executable,
-                os.path.join(project_dir, "ARG_MODULES", "uppumping.py"),
+                os.path.join(project_dir, "MODULES", "uppumping.py"),
                 "-i", active_input,
                 "-dir", args.outdir
             ]
@@ -281,7 +281,7 @@ def main():
             "Calculating oxygen balance",
             [
                 sys.executable,
-                os.path.join(project_dir, "ARG_MODULES", "oxygen_balance.py"),
+                os.path.join(project_dir, "MODULES", "oxygen_balance.py"),
                 "-i", active_input
             ]
         ))
@@ -289,7 +289,7 @@ def main():
     if args.enthalpy_of_formation:
         command = [
             sys.executable,
-            os.path.join(project_dir, "ARG_MODULES", "isodesmic.py"),
+            os.path.join(project_dir, "MODULES", "isodesmic.py"),
             "-i", active_input,
             "-dir", args.outdir,
         ]
@@ -309,7 +309,7 @@ def main():
             "Predicting generic properties",
             [
                 sys.executable,
-                os.path.join(project_dir, "ARG_MODULES", "generic_properties.py"),
+                os.path.join(project_dir, "MODULES", "generic_properties.py"),
                 "-i", active_input
             ]
         ))
@@ -319,7 +319,7 @@ def main():
             "Predicting detonation properties",
             [
                 sys.executable,
-                os.path.join(project_dir, "ARG_MODULES", "test_det_v_p.py"),
+                os.path.join(project_dir, "MODULES", "det_v_p.py"),
                 "-i", active_input,
                 "-dir", args.outdir,
             ]

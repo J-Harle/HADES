@@ -59,7 +59,7 @@ def parse_args():
 RDLogger.DisableLog("rdApp.*")
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
-txt_path = os.path.join(script_dir, "..", "MODULES", "SUBSTITUTION")
+txt_path = os.path.join(script_dir, "..", "MODULES", "TOOLS", "SUBSTITUTION")
 
 
 # READ INPUT FILES

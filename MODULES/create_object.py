@@ -164,43 +164,185 @@ def read_csv(filename):
     return df[["CID", "SMILES"]]
 
 # RDKit → ASE
-def create_ase_objs(smiles_list, max_attempts=10):
-    """Generate ASE atoms objects from a list of SMILES strings.
-
-    RDKit is used to add hydrogens and generate 3D conformers using ETKDG.
-    Successful RDKit structures are converted to ASE atoms objects through an
-    XYZ block.
+def create_ase_objs(
+    smiles_list,
+    n_conformers=10,
+    mmff_max_iters=25):
+    """
+    Generate multiple conformers for each SMILES, perform a quick MMFF94
+    optimisation, select the lowest-energy conformer, and convert only that
+    conformer to an ASE Atoms object.
 
     Parameters
     ----------
     smiles_list : list[str]
-        List of SMILES strings to convert.
-    max_attempts : int, optional
-        Maximum number of RDKit embedding attempts per molecule. Default is 10.
+        List of SMILES strings.
+
+    n_conformers : int, optional
+        Number of conformers to generate per molecule. Default is 10.
+
+    mmff_max_iters : int, optional
+        Maximum MMFF optimisation iterations for each conformer.
+        Default is 25.
 
     Returns
     -------
     list[ase.Atoms or None]
-        List of ASE atoms objects. Entries are None when conformer generation
-        fails.
+        Lowest-energy conformer for each molecule as an ASE Atoms object.
+        None is returned when conformer generation fails.
     """
+
     atoms_list = []
-    for smiles in smiles_list:
+
+    for smiles in tqdm(smiles_list, desc="Conformer search"):
+
+        # ---------------------------------------------------------
+        # Build molecule
+        # ---------------------------------------------------------
         mol = Chem.MolFromSmiles(smiles)
-        mol = Chem.AddHs(mol)
 
-        success = False
-        for _ in range(max_attempts):
-            if AllChem.EmbedMolecule(mol, AllChem.ETKDG()) == 0:
-                success = True
-                break
-
-        if not success or mol.GetNumConformers() == 0:
+        if mol is None:
+            print(f"[SMILES FAILED] {smiles}")
             atoms_list.append(None)
             continue
 
-        xyz_block = Chem.MolToXYZBlock(mol)
-        atoms = read(StringIO(xyz_block), format="xyz")
+        mol = Chem.AddHs(mol)
+
+        # ---------------------------------------------------------
+        # Generate conformers
+        # ---------------------------------------------------------
+        params = AllChem.ETKDGv3()
+
+        # Reproducible conformer generation
+        params.randomSeed = 42
+
+        # We want exactly n_conformers where possible, so do not
+        # prune geometrically similar conformers at this stage.
+        params.pruneRmsThresh = -1.0
+
+        # Avoid internal RDKit threading because the expensive
+        # MACE stage is parallelised separately.
+        params.numThreads = 1
+
+        try:
+            conf_ids = list(
+                AllChem.EmbedMultipleConfs(
+                    mol,
+                    numConfs=n_conformers,
+                    params=params,
+                )
+            )
+        except Exception as e:
+            print(f"[CONFORMER GENERATION FAILED] {smiles}: {e}")
+            atoms_list.append(None)
+            continue
+
+        if len(conf_ids) == 0:
+            print(f"[CONFORMER GENERATION FAILED] {smiles}")
+            atoms_list.append(None)
+            continue
+
+        # ---------------------------------------------------------
+        # Quick MMFF94 optimisation
+        # ---------------------------------------------------------
+        conformer_energies = []
+
+        if AllChem.MMFFHasAllMoleculeParams(mol):
+
+            mmff_props = AllChem.MMFFGetMoleculeProperties(
+                mol,
+                mmffVariant="MMFF94",
+            )
+
+            for conf_id in conf_ids:
+                try:
+                    ff = AllChem.MMFFGetMoleculeForceField(
+                        mol,
+                        mmff_props,
+                        confId=int(conf_id),
+                    )
+
+                    # Loose/quick optimisation
+                    ff.Minimize(maxIts=mmff_max_iters)
+
+                    # MMFF energy in kcal/mol
+                    energy = ff.CalcEnergy()
+
+                    conformer_energies.append(
+                        (int(conf_id), energy)
+                    )
+
+                except Exception:
+                    continue
+
+        # ---------------------------------------------------------
+        # UFF fallback
+        # ---------------------------------------------------------
+        elif AllChem.UFFHasAllMoleculeParams(mol):
+
+            print(
+                f"[WARNING] MMFF unavailable for {smiles}. "
+                f"Using UFF."
+            )
+
+            for conf_id in conf_ids:
+                try:
+                    ff = AllChem.UFFGetMoleculeForceField(
+                        mol,
+                        confId=int(conf_id),
+                    )
+
+                    ff.Minimize(maxIts=mmff_max_iters)
+
+                    energy = ff.CalcEnergy()
+
+                    conformer_energies.append(
+                        (int(conf_id), energy)
+                    )
+
+                except Exception:
+                    continue
+
+        # ---------------------------------------------------------
+        # If no force field was available, use first conformer
+        # ---------------------------------------------------------
+        if not conformer_energies:
+            print(
+                f"[WARNING] Force-field conformer optimisation failed "
+                f"for {smiles}. Using first embedded conformer."
+            )
+
+            best_conf_id = int(conf_ids[0])
+            best_energy = None
+
+        else:
+            # -----------------------------------------------------
+            # Select lowest-energy conformer
+            # -----------------------------------------------------
+            best_conf_id, best_energy = min(
+                conformer_energies,
+                key=lambda x: x[1],
+            )
+
+        # ---------------------------------------------------------
+        # Convert ONLY the best conformer to ASE
+        # ---------------------------------------------------------
+        xyz_block = Chem.MolToXYZBlock(
+            mol,
+            confId=best_conf_id,
+        )
+
+        atoms = read(
+            StringIO(xyz_block),
+            format="xyz",
+        )
+
+        # Optional metadata
+        atoms.info["selected_conformer"] = best_conf_id
+
+        if best_energy is not None:
+            atoms.info["mmff_energy_kcalmol"] = best_energy
+
         atoms_list.append(atoms)
 
     return atoms_list
@@ -219,7 +361,7 @@ def get_mace_calculator():
         Configured MACE calculator using CPU and float64 precision.
     """
     parent_dir = os.getcwd()
-    calc_dir = os.path.join(parent_dir, "CALCULATORS")
+    calc_dir = os.path.join(parent_dir, "MODULES", "TOOLS", "CALCULATORS")
     os.makedirs(calc_dir, exist_ok=True)
 
     model_file = os.path.join(calc_dir, "MACE-OFF23_small.model")
@@ -421,7 +563,8 @@ if __name__ == "__main__":
 
     df = read_csv(csv_path)
 
-    atoms_list = create_ase_objs(df["SMILES"].tolist())
+    atoms_list = create_ase_objs(df["SMILES"].tolist(),
+        n_conformers=10, mmff_max_iters=25)
 
     optimise_and_write_parallel(
         atoms_list,

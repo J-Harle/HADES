@@ -68,7 +68,7 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 
 default_model_path = os.path.join(
     script_dir,
-    "CALCULATORS",
+    "TOOLS","CALCULATORS",
     "MACE-OFF23_small.model"
 )
 
@@ -325,7 +325,7 @@ def calc_vibrations_parallel(ncores):
 
     for root, _, files in os.walk(xyz_dir):
         for f in files:
-            if f.endswith(".xyz") and not f.startswith("._"):
+            if f.endswith(".xyz") and not f.startswith("._") and "jmol" not in f.lower():
                 xyz_files.append(os.path.join(root, f))
 
     xyz_files = sorted(xyz_files)

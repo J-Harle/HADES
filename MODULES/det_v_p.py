@@ -3,12 +3,48 @@ import csv
 import joblib
 import numpy as np
 import matplotlib.pyplot as plt
+import argparse
 
 from collections import Counter
 from tqdm import tqdm
 
 from rdkit import Chem
 from rdkit.Chem import AllChem, Descriptors
+
+
+# =========================================================
+# ARGPARSE
+# =========================================================
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Calculate density and Kamlet-Jacobs detonation properties"
+    )
+
+    parser.add_argument(
+        "--input", "-i",
+        type=str,
+        required=True,
+        help="Input CSV file containing CID, SMILES, and Hf /kJmol-1 columns",
+    )
+
+    parser.add_argument(
+        "--outdir", "-dir",
+        type=str,
+        default="HADES",
+        help=(
+            "Name of subdirectory inside OPTIMISED_STRUCTURES containing "
+            "optimised molecule folders. Default: HADES"
+        ),
+    )
+
+    parser.add_argument(
+        "--no-plots",
+        action="store_true",
+        help="Do not create density scaling plots",
+    )
+
+    return parser.parse_args()
 
 
 # =========================================================
@@ -47,13 +83,13 @@ def read_csv(csv_path):
             eof_val = row["Hf /kJmol-1"].strip()
 
             if not eof_val:
-                print(f"[WARNING] Missing EOF for CID {row['CID']}")
+                print(f"[WARNING] Missing EOF for CID {row['molecule']}")
                 continue
 
             mol = {
                 "smiles": row["SMILES"],
                 "eof": float(eof_val),
-                "cid": row["CID"],
+                "cid": row["molecule"],
             }
 
             data.append(mol)
@@ -561,7 +597,7 @@ def write_to_csv(csv_path, results):
     }
 
     for row in rows:
-        cid = row["CID"]
+        cid = row["molecule"]
 
         if cid in results_map:
             mol = results_map[cid]
@@ -707,28 +743,40 @@ def create_scaling_plot(data, output_dir=None, show=False):
 
 if __name__ == "__main__":
 
+    args = parse_args()
+
     script_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.abspath(os.path.join(script_dir, ".."))
 
     # --------------------------------------------------
-    # Input CSV and XYZ directory
+    # Input CSV
     # --------------------------------------------------
-    csv_path = os.path.join(script_dir, "..", "large_data.csv",)
-    xyz_dir = os.path.join(script_dir, "..", "OPTIMISED_STRUCTURES", "LARGE_DATASET",)
+    csv_path = os.path.abspath(args.input)
 
-    # csv_path = os.path.join(script_dir, "..", "30_bench.csv")
-    # xyz_dir = os.path.join(script_dir, "..", "OPTIMISED_STRUCTURES", "30_MOL")
-
-    # csv_path = os.path.join(script_dir, "..", "bak_30_bench.csv")
-    # xyz_dir = os.path.join(script_dir, "..", "OPTIMISED_STRUCTURES", "DET_V_P_TEST")
+    # --------------------------------------------------
+    # Optimised XYZ directory
+    # --------------------------------------------------
+    xyz_dir = os.path.abspath(
+        os.path.join(
+            parent_dir,
+            "OPTIMISED_STRUCTURES",
+            args.outdir,
+        )
+    )
 
     # --------------------------------------------------
     # Density model
     # --------------------------------------------------
     model_path = os.path.join(
         script_dir,
-        "TOOLS", 
+        "TOOLS",
+        "DENSITY",
         "gbt_density_model.pkl",
     )
+
+    print(f"Input CSV: {csv_path}")
+    print(f"Optimised structure directory: {xyz_dir}")
+    print(f"Density model: {model_path}")
 
     density_model, density_feature_names = load_density_model(
         model_path,
@@ -754,6 +802,10 @@ if __name__ == "__main__":
             f"{cid}.xyz",
         )
 
+        if not os.path.exists(xyz_path):
+            print(f"[WARNING] Missing XYZ for {cid}: {xyz_path}")
+            continue
+
         mol = calc_density(
             xyz_path,
             mol,
@@ -769,16 +821,20 @@ if __name__ == "__main__":
         mol = det_v(mol)
         mol = det_p(mol)
 
-        plot_dir = os.path.join(
-            xyz_dir,
-            cid,
-        )
+        # --------------------------------------------------
+        # Gamma density-scaling plots
+        # --------------------------------------------------
+        if not args.no_plots:
+            plot_dir = os.path.join(
+                xyz_dir,
+                cid,
+            )
 
-        create_scaling_plot(
-            mol,
-            output_dir=plot_dir,
-            show=False,
-        )
+            create_scaling_plot(
+                mol,
+                output_dir=plot_dir,
+                show=False,
+            )
 
         results.append(mol)
 
