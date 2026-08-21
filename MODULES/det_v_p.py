@@ -740,8 +740,7 @@ def create_scaling_plot(data, output_dir=None, show=False):
 # =========================================================
 # MAIN
 # =========================================================
-
-if __name__ == "__main__":
+def main():
 
     args = parse_args()
 
@@ -849,3 +848,7 @@ if __name__ == "__main__":
     print("\nDone.")
     print(f"Processed molecules: {len(results)}")
     print(f"Updated CSV: {csv_path}")
+
+
+if __name__ == "__main__":
+    main()

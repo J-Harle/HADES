@@ -364,7 +364,12 @@ def calc_vibrations_parallel(ncores):
             xyz_file, status = future.result()
             print(f"{xyz_file}: {status}")
 
+def main():
 
-if __name__ == "__main__":
     ncores = resolve_ncores(args.cpus)
     calc_vibrations_parallel(ncores=ncores)
+
+
+
+if __name__ == "__main__":
+    main()

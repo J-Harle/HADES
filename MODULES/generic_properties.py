@@ -294,7 +294,7 @@ def calc_genprop(df):
     return feat_df
 
 
-if __name__ == "__main__":
+def main()
     """Run the generic molecular descriptor workflow.
 
     The workflow reads the input CSV, checks for a `SMILES` column, calculates
@@ -326,3 +326,6 @@ if __name__ == "__main__":
     df.to_csv(csv_path, index=False)
 
     print(f"\nAppended generic properties to CSV: {csv_path}")
+
+if __name__ == "__main__":
+    main()

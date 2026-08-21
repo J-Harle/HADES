@@ -546,7 +546,7 @@ def optimise_and_write_parallel(
     return results
 
 # MAIN
-if __name__ == "__main__":
+def main():
     args = parse_args()
 
     csv_path = args.input
@@ -576,3 +576,5 @@ if __name__ == "__main__":
 
     print("All jobs complete.")
 
+if __name__ == "__main__":
+    main()

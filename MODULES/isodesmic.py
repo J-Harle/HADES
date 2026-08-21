@@ -777,7 +777,7 @@ def update_csv_with_results(csv_path, results):
     df.to_csv(csv_path, index=False)
 
 # MAIN
-if __name__ == "__main__":
+def main():
 
     args = parse_args()
 
@@ -924,3 +924,6 @@ if __name__ == "__main__":
     print("\nDone.")
     print(f"Processed targets: {len(results)}")
     print(f"Updated CSV: {csv_path}")
+
+if __name__ == "__main__":
+    main()

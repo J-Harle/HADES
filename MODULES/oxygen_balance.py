@@ -137,7 +137,7 @@ def atom_counts_from_smiles(smiles):
 
 
 # Main logic
-if __name__ == "__main__":
+def main():
 
     args = parse_args()
     input_csv = resolve_path(args.input)
@@ -216,3 +216,5 @@ if __name__ == "__main__":
 
 
 
+if __name__ == "__main__":
+    main()
