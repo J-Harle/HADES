@@ -625,7 +625,9 @@ def write_to_csv(csv_path, results):
 def create_scaling_plot(data, output_dir=None, show=False):
     """
     Creates scaling plots for detonation velocity and pressure
-    by scaling the density using gamma.
+    by scaling the density using gamma. Range between 0 and 1.2 
+    assumes that the density prediction can underestimate the 
+    density by up to 20%
 
     gamma = 0 gives rho = 0
     gamma = 1 gives the original predicted density
@@ -644,7 +646,7 @@ def create_scaling_plot(data, output_dir=None, show=False):
         print(f"[WARNING] Cannot create scaling plot because phi is NaN for CID {cid}")
         return None
 
-    gamma = np.arange(0, 1.001, 0.001)
+    gamma = np.arange(0, 1.201, 0.001)
 
     # Scale density, not final D/P
     scaled_density = rho0 * gamma
