@@ -7,7 +7,7 @@ name = "hades-em"
 version = "1.0.0"
 description = "High-throughput Analysis for the Design of Energetic Systems"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 authors = [
     {name = "Joshua T. Harle"}
 ]
