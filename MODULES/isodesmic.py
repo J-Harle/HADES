@@ -64,6 +64,41 @@ def parse_args():
         help="Number of rows/targets to process. Default: process all rows."
     )
 
+    parser.add_argument(
+        "--max-reactants",
+        type=int,
+        default=3,
+        help="Maximum number of reference reactants. Default: 3",
+    )
+
+    parser.add_argument(
+        "--max-products",
+        type=int,
+        default=3,
+        help="Maximum number of additional reference products. Default: 3",
+    )
+
+    parser.add_argument(
+        "--energy-cutoff-ha",
+        type=float,
+        default=0.005,
+        help="Maximum absolute reaction energy in Hartree. Default: 0.005",
+    )
+
+    parser.add_argument(
+        "--weighting",
+        choices=("inverse", "boltzmann", "uniform"),
+        default="inverse",
+        help="Reaction weighting scheme. Default: inverse",
+    )
+
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=298.15,
+        help="Temperature in kelvin for Boltzmann weighting. Default: 298.15",
+    )
+
     return parser.parse_args()
 
 
@@ -71,6 +106,7 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 
 EV_TO_HARTREE = 1.0 / 27.211386245988
 HARTREE_TO_KJMOL = 2625.49962
+BOLTZMANN_HARTREE_PER_K = 3.166811563e-6
 
 TARGET_ID_COLUMN_CANDIDATES = [
     "CID",
@@ -488,6 +524,9 @@ def build_combo_cache(names, vectors, max_r=None):
         Array of summed combination vectors and matching lists of molecule
         names for each combination.
     """
+    if max_r is None or max_r < 1:
+        raise ValueError("max_r must be a positive integer")
+
     combo_vecs = []
     combo_names = []
 
@@ -539,6 +578,17 @@ def build_reverse_lookup(json_data, feature_index):
 
 
 # VECTORISED ISODESMIC SEARCH
+def build_combo_lookup(combo_vecs):
+    """Map each feature vector to every matching combination index."""
+    lookup = {}
+
+    for index, vector in enumerate(combo_vecs):
+        key = tuple(vector.tolist())
+        lookup.setdefault(key, []).append(index)
+
+    return lookup
+
+
 def find_isodesmics(combo_vecs, combo_names, target_vec, target_smiles, 
                     combo_lookup=None, max_product_r = None):
     """Find atom- and bond-balanced isodesmic reactions for a target molecule.
@@ -572,10 +622,7 @@ def find_isodesmics(combo_vecs, combo_names, target_vec, target_smiles,
         """    
     # Build lookup if not provided
     if combo_lookup is None:
-        combo_lookup = {
-            tuple(vec.tolist()): i
-            for i, vec in enumerate(combo_vecs)
-        }
+        combo_lookup = build_combo_lookup(combo_vecs)
 
     # Compute leftover vectors
     leftover = combo_vecs - target_vec
@@ -605,19 +652,26 @@ def find_isodesmics(combo_vecs, combo_names, target_vec, target_smiles,
         if key not in combo_lookup:
             continue
 
-        prod_idx = combo_lookup[key]
-        product_combo = combo_names[prod_idx]
+        product_indices = combo_lookup[key]
 
-        # ---- Control explosion: limit product size
-        if len(product_combo) > max_product_r:
-            continue
+        # Accept lookups created by older callers while preserving the new
+        # one-vector-to-many-combinations behaviour.
+        if isinstance(product_indices, (int, np.integer)):
+            product_indices = [int(product_indices)]
 
-        products = [target_smiles] + product_combo
+        for prod_idx in product_indices:
+            product_combo = combo_names[prod_idx]
 
-        solutions.append({
-            "reactants": reactants,
-            "products": products
-        })
+            # ---- Control explosion: limit product size
+            if max_product_r is not None and len(product_combo) > max_product_r:
+                continue
+
+            products = [target_smiles] + product_combo
+
+            solutions.append({
+                "reactants": reactants,
+                "products": products
+            })
 
     return solutions
 
@@ -688,7 +742,12 @@ def calculate_hf(solutions, json_data, target_smiles):
         sol["Hf_target"] = sum_reactants - sum_products - sol["Delta_E_Ha"]
 
 
-def filter_and_average(solutions):
+def filter_and_average(
+    solutions,
+    energy_cutoff_ha=0.005,
+    weighting="inverse",
+    temperature=298.15,
+):
     """Filter candidate reactions and calculate weighted-average enthalpy.
 
     Reactions are retained if their absolute reaction energy is less than
@@ -708,9 +767,15 @@ def filter_and_average(solutions):
         filtered reactions. If no reactions pass filtering, returns
         `(None, None, [])`.
     """
+    if energy_cutoff_ha <= 0:
+        raise ValueError("energy_cutoff_ha must be positive")
+
+    if temperature <= 0:
+        raise ValueError("temperature must be positive")
+
     filtered = [
         s for s in solutions
-        if abs(s["Delta_E_Ha"]) < 0.005 # 0.005
+        if abs(s["Delta_E_Ha"]) < energy_cutoff_ha
     ]
 
     if not filtered:
@@ -723,7 +788,20 @@ def filter_and_average(solutions):
 
         return None, None, []
 
-    weights = np.array([1 / (abs(s["Delta_E_Ha"]) + 1e-6) for s in filtered])
+    delta_e = np.array([abs(s["Delta_E_Ha"]) for s in filtered], dtype=float)
+
+    if weighting == "inverse":
+        weights = 1.0 / (delta_e + 1e-6)
+    elif weighting == "boltzmann":
+        thermal_energy = BOLTZMANN_HARTREE_PER_K * temperature
+        weights = np.exp(-delta_e / thermal_energy)
+    elif weighting == "uniform":
+        weights = np.ones_like(delta_e)
+    else:
+        raise ValueError(
+            "weighting must be one of: 'inverse', 'boltzmann', or 'uniform'"
+        )
+
     hf_values = np.array([s["Hf_target"] for s in filtered])
 
     weighted_mean = np.sum(weights * hf_values) / np.sum(weights)
@@ -781,20 +859,13 @@ def main():
 
     args = parse_args()
 
-    max_r = 3          # max reactant combo size
-    max_p = 3          # max product combo size
+    max_r = args.max_reactants
+    max_p = args.max_products
     save_every = 1000
 
     csv_path = os.path.abspath(args.input)
 
-    optimised_dir = os.path.abspath(
-        os.path.join(
-            script_dir,
-            "..",
-            # "OPTIMISED_STRUCTURES",
-            args.outdir,
-        )
-    )
+    optimised_dir = os.path.abspath(args.outdir)
 
     ref_csv_path = os.path.join(
         script_dir,
@@ -813,7 +884,7 @@ def main():
     targets = read_target_mol(
         csv_path,
         optimised_dir,
-        nrows=None,
+        nrows=args.nrows,
     )
 
     # Build feature space
@@ -843,10 +914,7 @@ def main():
     # FAST lookup for combo vectors
     print("[LOOKUP] Building combo lookup...")
 
-    combo_lookup = {
-        tuple(vec.tolist()): i
-        for i, vec in enumerate(combo_vecs)
-    }
+    combo_lookup = build_combo_lookup(combo_vecs)
 
     results = {}
 
@@ -891,6 +959,9 @@ def main():
 
             mean_hf, spread, filtered = filter_and_average(
                 solutions,
+                energy_cutoff_ha=args.energy_cutoff_ha,
+                weighting=args.weighting,
+                temperature=args.temperature,
             )
 
             if not filtered:

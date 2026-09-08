@@ -32,6 +32,10 @@ def calculate_omega_max(freqs):
         return None, None
 
     freqs = [f for f in freqs if f > 100]
+
+    if not freqs:
+        return None, 0
+
     low_freqs = [f for f in freqs if f <= 200]
 
     if low_freqs:
@@ -118,17 +122,6 @@ if __name__ == "__main__":
 
     args = parse_args()
 
-    input_stem = os.path.splitext(os.path.basename(args.input))[0]
-
-    if input_stem.endswith("_raw"):
-        raw_csv_name = f"{input_stem}.csv"
-    else:
-        raw_csv_name = f"{input_stem}_raw.csv"
-
-    raw_csv_path = os.path.join(script_dir, raw_csv_name)
-
-    # print(f"\nProcessing: {raw_csv_path}")
-
-    process_csv_streaming(raw_csv_path)
+    process_csv_streaming(args.input)
 
     # print()

@@ -4,6 +4,13 @@ import argparse
 import subprocess
 import os
 import sys
+from importlib.metadata import PackageNotFoundError, version
+
+
+try:
+    __version__ = version("hades-em")
+except PackageNotFoundError:
+    __version__ = "0.1.0"
 
 header = r"""
   _    _              _____    ______    _____ 
@@ -16,12 +23,15 @@ header = r"""
  High-throughput Analysis for the Design of Energetic Systems
 """
 
-print(header)
-
-
 def parse_args():
     parser = argparse.ArgumentParser(
         description="HADES: High-throughput Analysis for the Design of Energetic Systems"
+    )
+
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"HADES {__version__}",
     )
 
     parser.add_argument(
@@ -93,6 +103,26 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--h50-a",
+        type=float,
+        default=0.065785,
+        help="Gradient of the calibrated impact-sensitivity relationship",
+    )
+
+    parser.add_argument(
+        "--h50-b",
+        type=float,
+        default=0.011077,
+        help="Intercept of the calibrated impact-sensitivity relationship",
+    )
+
+    parser.add_argument(
+        "--keep-intermediates",
+        action="store_true",
+        help="Keep intermediate CSV files from impact-sensitivity calculations",
+    )
+
+    parser.add_argument(
         "--cpus", "-c",
         type=int,
         default=-1,
@@ -138,12 +168,14 @@ def print_run_plan(steps, args, active_input):
 
 def main():
     args = parse_args()
+    print(header)
 
-    project_dir = os.path.dirname(os.path.abspath(__file__))
+    package_dir = os.path.dirname(os.path.abspath(__file__))
+    working_dir = os.getcwd()
 
     def resolve_path(path):
         """
-        Resolve normal file paths relative to the HADES project directory.
+        Resolve normal file paths relative to the current working directory.
         Used for CSV input/output files.
         """
         if path is None:
@@ -152,24 +184,24 @@ def main():
         if os.path.isabs(path):
             return path
 
-        return os.path.abspath(os.path.join(project_dir, path))
+        return os.path.abspath(os.path.join(working_dir, path))
 
     def resolve_outdir(outdir):
         """
         Force all structure directories to live inside:
 
-            <project_dir>/OPTIMISED_STRUCTURES/<outdir>
+            <working_dir>/OPTIMISED_STRUCTURES/<outdir>
 
         Examples
         --------
         -dir test
-        -> <project_dir>/OPTIMISED_STRUCTURES/test
+        -> <working_dir>/OPTIMISED_STRUCTURES/test
 
         -dir STORM/SMALL_MODEL
-        -> <project_dir>/OPTIMISED_STRUCTURES/STORM/SMALL_MODEL
+        -> <working_dir>/OPTIMISED_STRUCTURES/STORM/SMALL_MODEL
 
         -dir OPTIMISED_STRUCTURES/test
-        -> <project_dir>/OPTIMISED_STRUCTURES/test
+        -> <working_dir>/OPTIMISED_STRUCTURES/test
         """
 
         if outdir is None or outdir.strip() == "":
@@ -199,7 +231,7 @@ def main():
         clean_outdir = os.path.join(*parts) if parts else "HADES"
 
         return os.path.abspath(
-            os.path.join(project_dir, "OPTIMISED_STRUCTURES", clean_outdir)
+            os.path.join(working_dir, "OPTIMISED_STRUCTURES", clean_outdir)
         )
 
     # Auto-enable generation if no input file provided
@@ -234,7 +266,7 @@ def main():
             f"Generating {args.generate} molecules",
             [
                 sys.executable,
-                os.path.join(project_dir, "MODULES", "substitution.py"),
+                os.path.join(package_dir, "MODULES", "substitution.py"),
                 "-i", args.input or "none",
                 "-o", args.output,
                 "-n", str(args.generate)
@@ -246,7 +278,7 @@ def main():
             "Optimising molecules",
             [
                 sys.executable,
-                os.path.join(project_dir, "MODULES", "create_object.py"),
+                os.path.join(package_dir, "MODULES", "create_object.py"),
                 "-i", active_input,
                 "--outdir", args.outdir,
                 "-c", str(args.cpus)
@@ -258,7 +290,7 @@ def main():
             "Calculating vibrations",
             [
                 sys.executable,
-                os.path.join(project_dir, "MODULES", "vibration.py"),
+                os.path.join(package_dir, "MODULES", "vibration.py"),
                 "-i", active_input,
                 "-dir", args.outdir,
                 "-c", str(args.cpus)
@@ -266,14 +298,21 @@ def main():
         ))
 
     if args.impact_sensitivity:
+        impact_command = [
+            sys.executable,
+            os.path.join(package_dir, "MODULES", "uppumping.py"),
+            "-i", active_input,
+            "-dir", args.outdir,
+            "--h50-a", str(args.h50_a),
+            "--h50-b", str(args.h50_b),
+        ]
+
+        if args.keep_intermediates:
+            impact_command.append("--keep-intermediates")
+
         steps.append((
             "Predicting impact sensitivity",
-            [
-                sys.executable,
-                os.path.join(project_dir, "MODULES", "uppumping.py"),
-                "-i", active_input,
-                "-dir", args.outdir
-            ]
+            impact_command,
         ))
 
     if args.oxygen_balance:
@@ -281,7 +320,7 @@ def main():
             "Calculating oxygen balance",
             [
                 sys.executable,
-                os.path.join(project_dir, "MODULES", "oxygen_balance.py"),
+                os.path.join(package_dir, "MODULES", "oxygen_balance.py"),
                 "-i", active_input
             ]
         ))
@@ -289,7 +328,7 @@ def main():
     if args.enthalpy_of_formation:
         command = [
             sys.executable,
-            os.path.join(project_dir, "MODULES", "isodesmic.py"),
+            os.path.join(package_dir, "MODULES", "isodesmic.py"),
             "-i", active_input,
             "-dir", args.outdir,
         ]
@@ -309,7 +348,7 @@ def main():
             "Predicting generic properties",
             [
                 sys.executable,
-                os.path.join(project_dir, "MODULES", "generic_properties.py"),
+                os.path.join(package_dir, "MODULES", "generic_properties.py"),
                 "-i", active_input
             ]
         ))
@@ -319,7 +358,7 @@ def main():
             "Predicting detonation properties",
             [
                 sys.executable,
-                os.path.join(project_dir, "MODULES", "det_v_p.py"),
+                os.path.join(package_dir, "MODULES", "det_v_p.py"),
                 "-i", active_input,
                 "-dir", args.outdir,
             ]
@@ -331,7 +370,7 @@ def main():
 
     for i, (description, command) in enumerate(steps, start=1):
         print(f"\n[{i}/{total_steps}] {description}...")
-        subprocess.run(command, check=True, cwd=project_dir)
+        subprocess.run(command, check=True, cwd=working_dir)
         print(header)
 
 

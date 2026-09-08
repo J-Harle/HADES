@@ -68,6 +68,22 @@ DEFAULT_DENSITY_FEATURE_NAMES = [
 
 DESCRIPTOR_LIBRARY = dict(Descriptors.descList)
 
+ID_COLUMN_CANDIDATES = ("CID", "molecule", "MOLECULE", "FILENAME")
+
+
+def find_id_column(fieldnames):
+    """Return the first supported molecule identifier column."""
+    fields = [str(field).strip() for field in (fieldnames or [])]
+
+    for candidate in ID_COLUMN_CANDIDATES:
+        if candidate in fields:
+            return candidate
+
+    raise KeyError(
+        "No molecule identifier column found. Expected one of "
+        f"{ID_COLUMN_CANDIDATES}; available columns: {fields}"
+    )
+
 
 # =========================================================
 # READ CSV
@@ -76,20 +92,28 @@ DESCRIPTOR_LIBRARY = dict(Descriptors.descList)
 def read_csv(csv_path):
     data = []
 
-    with open(csv_path, "r") as f:
+    with open(csv_path, "r", encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f)
+        id_column = find_id_column(reader.fieldnames)
+
+        if "SMILES" not in (reader.fieldnames or []):
+            raise KeyError("Input CSV must contain a 'SMILES' column")
+
+        if "Hf /kJmol-1" not in (reader.fieldnames or []):
+            raise KeyError("Input CSV must contain an 'Hf /kJmol-1' column")
 
         for row in reader:
+            cid = str(row.get(id_column, "")).strip()
             eof_val = row["Hf /kJmol-1"].strip()
 
             if not eof_val:
-                print(f"[WARNING] Missing EOF for CID {row['molecule']}")
+                print(f"[WARNING] Missing EOF for {id_column} {cid}")
                 continue
 
             mol = {
                 "smiles": row["SMILES"],
                 "eof": float(eof_val),
-                "cid": row["molecule"],
+                "cid": cid,
             }
 
             data.append(mol)
@@ -574,16 +598,18 @@ def det_p(data):
 # =========================================================
 
 def write_to_csv(csv_path, results):
-    with open(csv_path, "r") as f:
+    with open(csv_path, "r", encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f)
         rows = list(reader)
         fieldnames = reader.fieldnames if reader.fieldnames else []
+
+    id_column = find_id_column(fieldnames)
 
     new_fields = [
         "density / gcm-3",
         "base_density / gcm-3",
         "det_velocity / kms-1",
-        "det_pressure / Gpa",
+        "det_pressure / GPa",
         "Q",
     ]
 
@@ -597,7 +623,7 @@ def write_to_csv(csv_path, results):
     }
 
     for row in rows:
-        cid = row["molecule"]
+        cid = str(row.get(id_column, "")).strip()
 
         if cid in results_map:
             mol = results_map[cid]
@@ -605,10 +631,10 @@ def write_to_csv(csv_path, results):
             row["density / gcm-3"] = mol.get("density")
             row["base_density / gcm-3"] = mol.get("base_density")
             row["det_velocity / kms-1"] = mol.get("d")
-            row["det_pressure / Gpa"] = mol.get("p")
+            row["det_pressure / GPa"] = mol.get("p")
             row["Q"] = mol.get("Q")
 
-    with open(csv_path, "w", newline="") as f:
+    with open(csv_path, "w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(
             f,
             fieldnames=fieldnames,

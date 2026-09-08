@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+.venv/
+OPTIMISED_STRUCTURES/
+*_raw.csv
+*_impact_predictions.csv
+*.download

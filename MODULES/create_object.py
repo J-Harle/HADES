@@ -14,9 +14,13 @@ import os
 import sys
 import warnings
 import contextlib
-import urllib.request
 import pandas as pd
 import argparse
+
+try:
+    from .model_utils import ensure_mace_model
+except ImportError:  # Executed directly by hades.py
+    from model_utils import ensure_mace_model
 
 # ARGPARSE
 def parse_args():
@@ -360,22 +364,11 @@ def get_mace_calculator():
     MACECalculator
         Configured MACE calculator using CPU and float64 precision.
     """
-    parent_dir = os.getcwd()
-    calc_dir = os.path.join(parent_dir, "MODULES", "TOOLS", "CALCULATORS")
-    os.makedirs(calc_dir, exist_ok=True)
-
-    model_file = os.path.join(calc_dir, "MACE-OFF23_small.model")
-
-    if not os.path.exists(model_file):
-        url = (
-            "https://github.com/ACEsuit/mace-off/blob/main/"
-            "mace_off23/MACE-OFF23_small.model?raw=true"
-        )
-        urllib.request.urlretrieve(url, model_file)
+    model_file = ensure_mace_model()
 
     with suppress_output():
         calc = MACECalculator(
-            model_paths=[model_file],
+            model_paths=[str(model_file)],
             dispersion=False,
             default_dtype="float64",
             device="cpu",
@@ -562,6 +555,9 @@ def main():
     print(f"CPUs used: {ncores}")
 
     df = read_csv(csv_path)
+
+    # Download once in the parent process to avoid concurrent worker downloads.
+    ensure_mace_model()
 
     atoms_list = create_ase_objs(df["SMILES"].tolist(),
         n_conformers=10, mmff_max_iters=25)

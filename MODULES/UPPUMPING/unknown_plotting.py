@@ -389,6 +389,9 @@ def predict_h50(all_data, a, b):
         else:
             predicted_h50 = a / denominator
 
+        if not np.isfinite(predicted_h50) or predicted_h50 < 0:
+            predicted_h50 = np.nan
+
         mol["predicted_H50"] = predicted_h50
 
     return all_data

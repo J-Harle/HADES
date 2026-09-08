@@ -21,6 +21,11 @@ import ase.io
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from ase.vibrations import Vibrations
 
+try:
+    from .model_utils import default_mace_model_path, ensure_mace_model
+except ImportError:  # Executed directly by hades.py
+    from model_utils import default_mace_model_path, ensure_mace_model
+
 
 # ENVIRONMENT VARIABLES (MUST BE SET BEFORE TORCH / MACE IMPORT)
 os.environ["TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"] = "0"
@@ -66,50 +71,48 @@ torch.set_num_interop_threads(1)
 # CLI
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
-default_model_path = os.path.join(
-    script_dir,
-    "TOOLS","CALCULATORS",
-    "MACE-OFF23_small.model"
-)
+default_model_path = str(default_mace_model_path())
 
 default_xyz_dir = os.path.join(
     "OPTIMISED_STRUCTURES",
     "HADES"
 )
 
-parser = argparse.ArgumentParser(
-    description="Calculate MACE vibrational frequencies and eigenvectors for XYZ structures"
-)
+def parse_args():
+    """Parse command-line options without running at import time."""
+    parser = argparse.ArgumentParser(
+        description="Calculate MACE vibrational frequencies and eigenvectors for XYZ structures"
+    )
 
-parser.add_argument(
-    "--input", "-i",
-    type=str,
-    default=None,
-    help="Optional input CSV path. Included for compatibility with hades.py."
-)
+    parser.add_argument(
+        "--input", "-i",
+        type=str,
+        default=None,
+        help="Optional input CSV path. Included for compatibility with hades.py."
+    )
 
-parser.add_argument(
-    "--outdir", "-dir",
-    type=str,
-    default=default_xyz_dir,
-    help="Directory containing optimised XYZ structures. Default: OPTIMISED_STRUCTURES/HADES"
-)
+    parser.add_argument(
+        "--outdir", "-dir",
+        type=str,
+        default=default_xyz_dir,
+        help="Directory containing optimised XYZ structures. Default: OPTIMISED_STRUCTURES/HADES"
+    )
 
-parser.add_argument(
-    "--cpus", "-c",
-    type=int,
-    default=-1,
-    help="Number of worker processes. Use -1 for all available cores. Default: -1"
-)
+    parser.add_argument(
+        "--cpus", "-c",
+        type=int,
+        default=-1,
+        help="Number of worker processes. Use -1 for all available cores. Default: -1"
+    )
 
-parser.add_argument(
-    "--model",
-    type=str,
-    default=default_model_path,
-    help="Path to MACE model file"
-)
+    parser.add_argument(
+        "--model",
+        type=str,
+        default=default_model_path,
+        help="Path to MACE model file"
+    )
 
-args = parser.parse_args()
+    return parser.parse_args()
 
 
 # PATH HANDLING
@@ -127,10 +130,6 @@ def resolve_path(path):
         Absolute version of the input path.
     """
     return os.path.abspath(path)
-
-
-calc_dir = resolve_path(args.model)
-xyz_dir = resolve_path(args.outdir)
 
 
 def resolve_ncores(cpus):
@@ -210,7 +209,7 @@ def calculator(model_path):
 
 
 # CORE WORKER
-def process_xyz(xyz_path):
+def process_xyz(xyz_path, model_path):
     """Run vibrational analysis for a single XYZ structure.
 
     This function reads an XYZ file, attaches a MACE calculator, runs ASE
@@ -235,7 +234,7 @@ def process_xyz(xyz_path):
         atoms = ase.io.read(xyz_path)
 
         with suppress_output():
-            atoms.calc = calculator(calc_dir)
+            atoms.calc = calculator(model_path)
 
         print(
             f"[PID {os.getpid()}] Calculating vibrations for "
@@ -302,7 +301,7 @@ def process_xyz(xyz_path):
 
 
 # PARALLEL DRIVER
-def calc_vibrations_parallel(ncores):
+def calc_vibrations_parallel(ncores, xyz_dir, model_path, input_csv=None):
     """Run vibrational analysis for all XYZ files in parallel.
 
     The function recursively searches the configured XYZ directory for `.xyz`
@@ -333,21 +332,21 @@ def calc_vibrations_parallel(ncores):
     print("\nVibration calculation settings")
     print("-" * 50)
 
-    if args.input is not None:
-        print(f"Input CSV: {resolve_path(args.input)}")
+    if input_csv is not None:
+        print(f"Input CSV: {resolve_path(input_csv)}")
 
     print(f"XYZ directory: {xyz_dir}")
-    print(f"Model file:    {calc_dir}")
+    print(f"Model file:    {model_path}")
     print(f"Running on:    {ncores} workers")
     print(f"Found:         {len(xyz_files)} XYZ structures")
 
-    if not os.path.isfile(calc_dir):
-        raise FileNotFoundError(f"MACE model file not found: {calc_dir}")
+    if not os.path.isfile(model_path):
+        raise FileNotFoundError(f"MACE model file not found: {model_path}")
 
     if not os.path.isdir(xyz_dir):
         raise NotADirectoryError(f"XYZ directory not found: {xyz_dir}")
 
-    print(f"Model MD5:     {file_md5(calc_dir)}")
+    print(f"Model MD5:     {file_md5(model_path)}")
     print("-" * 50)
 
     if not xyz_files:
@@ -356,7 +355,7 @@ def calc_vibrations_parallel(ncores):
 
     with ProcessPoolExecutor(max_workers=ncores) as executor:
         futures = {
-            executor.submit(process_xyz, xyz): xyz
+            executor.submit(process_xyz, xyz, model_path): xyz
             for xyz in xyz_files
         }
 
@@ -365,9 +364,18 @@ def calc_vibrations_parallel(ncores):
             print(f"{xyz_file}: {status}")
 
 def main():
+    args = parse_args()
+    model_path = resolve_path(args.model)
+    xyz_dir = resolve_path(args.outdir)
 
+    ensure_mace_model(model_path)
     ncores = resolve_ncores(args.cpus)
-    calc_vibrations_parallel(ncores=ncores)
+    calc_vibrations_parallel(
+        ncores=ncores,
+        xyz_dir=xyz_dir,
+        model_path=model_path,
+        input_csv=args.input,
+    )
 
 
 

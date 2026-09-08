@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use HADES in research, please cite the archived software release."
+title: "HADES: High-throughput Analysis for the Design of Energetic Systems"
+type: software
+authors:
+  - family-names: Harle
+    given-names: Joshua T.
+repository-code: "https://github.com/J-Harle/HADES"
+url: "https://github.com/J-Harle/HADES"
+version: 0.1.0
+license: MIT
+keywords:
+  - computational chemistry
+  - energetic materials
+  - molecular design
+  - thermochemistry

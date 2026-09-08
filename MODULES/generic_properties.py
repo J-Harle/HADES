@@ -15,7 +15,7 @@ import os
 
 import pandas as pd
 from rdkit import Chem
-from rdkit.Chem import AllChem, GraphDescriptors
+from rdkit.Chem import AllChem, GraphDescriptors, Lipinski
 from tqdm import tqdm
 
 
@@ -117,9 +117,6 @@ def calc_genprop(df):
     all_bond_keys = set()
 
     nitro_smarts = Chem.MolFromSmarts("[N+](=O)[O-]")
-    hbd_smarts = Chem.MolFromSmarts("[N,H,O;!$(*=O)]")
-    hba_smarts = Chem.MolFromSmarts("[N,O;!$(*=O)]")
-
     for smi in tqdm(
         df["SMILES"],
         total=len(df),
@@ -130,7 +127,7 @@ def calc_genprop(df):
 
         if mol is None:
             for key in features:
-                features[key].append(None)
+                features[key].append({} if key == "bond_dicts" else None)
 
             continue
 
@@ -225,8 +222,8 @@ def calc_genprop(df):
         # --------------------------------------------------
         # Hydrogen-bonding features
         # --------------------------------------------------
-        donors = len(mol.GetSubstructMatches(hbd_smarts))
-        acceptors = len(mol.GetSubstructMatches(hba_smarts))
+        donors = Lipinski.NumHDonors(mol)
+        acceptors = Lipinski.NumHAcceptors(mol)
 
         features["h_bond_donors"].append(donors)
         features["h_bond_acceptors"].append(acceptors)
@@ -234,7 +231,7 @@ def calc_genprop(df):
         if acceptors > 0:
             features["h_bond_ratio"].append(donors / acceptors)
         elif donors > 0:
-            features["h_bond_ratio"].append("Div0Error")
+            features["h_bond_ratio"].append(None)
         else:
             features["h_bond_ratio"].append(0)
 
@@ -294,7 +291,7 @@ def calc_genprop(df):
     return feat_df
 
 
-def main()
+def main():
     """Run the generic molecular descriptor workflow.
 
     The workflow reads the input CSV, checks for a `SMILES` column, calculates
