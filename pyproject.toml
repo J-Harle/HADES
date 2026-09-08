@@ -1,23 +1,38 @@
-[tool.hades]
-name = "HADES"
-description = "High-throughput Analysis for the Design of Energetic Systems"
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hades-em"
 version = "1.0.0"
-authors = ["Joshua T. Harle 13jharle@gmail.com"]
-license = "MIT"
+description = "High-throughput Analysis for the Design of Energetic Systems"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    {name = "Joshua T. Harle"}
+]
+license = {text = "MIT"}
 
-[tool.hades.dependencies]
-python = ">=3.8"
-argparse = "*"
-subprocess = "*"
-os = "*"
-sys = "*"
-rdkit = ">=2025.3.6"
-numpy = "*"
-pandas = "*"
-matplotlib = "*"
-scikit-learn = "*"
-torch = "*"
+dependencies = [
+    "ase>=3.26",
+    "joblib",
+    "mace-torch>=0.3.14",
+    "numpy",
+    "pandas",
+    "rdkit>=2025.3.6",
+    "scikit-learn",
+    "torch",
+    "tqdm",
+]
 
-[tool.hades.settings]
-input_default = "None"
-output_default = "hades_out.csv"
+[project.scripts]
+hades = "hades.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+hades = [
+    "data/*.csv",
+    "data/*.pkl",
+]

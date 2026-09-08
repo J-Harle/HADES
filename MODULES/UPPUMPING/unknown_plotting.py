@@ -362,10 +362,6 @@ def plot_final(all_data, dpi=100, save_path=None):
 
 def predict_h50(all_data, a, b):
 
-    # print("\nPredicted impact sensitivities")
-    # print("-" * 70)
-    # print(f"{'Molecule':<30} {'Predicted H50 / J':>20}")
-
     for mol in tqdm(
         all_data,
         desc="Predicting H50",
@@ -375,19 +371,23 @@ def predict_h50(all_data, a, b):
         exp_ratio = mol.get("exp_ratio")
         raw_integral = mol.get("raw_integral")
 
+        # Prediction cannot be calculated if either value is missing
         if exp_ratio is None or raw_integral is None:
-            mol["predicted_H50"] = None
+            mol["predicted_H50"] = np.nan
             continue
 
         metric = raw_integral * exp_ratio
-
         denominator = metric - b
 
+        # Avoid division by zero
         if abs(denominator) < 1e-12:
             predicted_h50 = np.nan
-
         else:
             predicted_h50 = a / denominator
+
+            # Replace negative or non-finite predictions with NaN
+            if predicted_h50 < 0 or not np.isfinite(predicted_h50):
+                predicted_h50 = np.nan
 
         mol["predicted_H50"] = predicted_h50
 
