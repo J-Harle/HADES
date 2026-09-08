@@ -139,7 +139,7 @@ def print_run_plan(steps, args, active_input):
 def main():
     args = parse_args()
 
-    project_dir = os.getcwd())
+    project_dir = os.getcwd()
 
     def resolve_path(path):
         """
