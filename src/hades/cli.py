@@ -139,7 +139,7 @@ def print_run_plan(steps, args, active_input):
 def main():
     args = parse_args()
 
-    project_dir = os.path.dirname(os.path.abspath(__file__))
+    project_dir = os.getcwd())
 
     def resolve_path(path):
         """
@@ -234,10 +234,12 @@ def main():
             f"Generating {args.generate} molecules",
             [
                 sys.executable,
-                os.path.join(project_dir, "MODULES", "substitution.py"),
-                "-i", args.input or "none",
-                "-o", args.output,
-                "-n", str(args.generate)
+                "-m",
+                "hades.substitution",
+                "-o",
+                args.output,
+                "-n",
+                str(args.generate),
             ]
         ))
 
@@ -246,10 +248,14 @@ def main():
             "Optimising molecules",
             [
                 sys.executable,
-                os.path.join(project_dir, "MODULES", "create_object.py"),
-                "-i", active_input,
-                "--outdir", args.outdir,
-                "-c", str(args.cpus)
+                "-m",
+                "hades.create_object",
+                "-i",
+                active_input,
+                "--outdir",
+                args.outdir,
+                "-c",
+                str(args.cpus),
             ]
         ))
 
@@ -258,10 +264,14 @@ def main():
             "Calculating vibrations",
             [
                 sys.executable,
-                os.path.join(project_dir, "MODULES", "vibration.py"),
-                "-i", active_input,
-                "-dir", args.outdir,
-                "-c", str(args.cpus)
+                "-m",
+                "hades.vibration",
+                "-i",
+                active_input,
+                "-dir",
+                args.outdir,
+                "-c",
+                str(args.cpus),
             ]
         ))
 
@@ -270,9 +280,12 @@ def main():
             "Predicting impact sensitivity",
             [
                 sys.executable,
-                os.path.join(project_dir, "MODULES", "uppumping.py"),
-                "-i", active_input,
-                "-dir", args.outdir
+                "-m",
+                "hades.uppumping",
+                "-i",
+                active_input,
+                "-dir",
+                args.outdir,
             ]
         ))
 
@@ -281,22 +294,28 @@ def main():
             "Calculating oxygen balance",
             [
                 sys.executable,
-                os.path.join(project_dir, "MODULES", "oxygen_balance.py"),
-                "-i", active_input
+                "-m",
+                "hades.oxygen_balance",
+                "-i",
+                active_input,
             ]
         ))
 
     if args.enthalpy_of_formation:
         command = [
             sys.executable,
-            os.path.join(project_dir, "MODULES", "isodesmic.py"),
-            "-i", active_input,
-            "-dir", args.outdir,
+            "-m",
+            "hades.isodesmic",
+            "-i",
+            active_input,
+            "-dir",
+            args.outdir,
         ]
 
         if args.generate is not None:
             command.extend([
-                "-n", str(args.generate)
+                "-n",
+                str(args.generate),
             ])
 
         steps.append((
@@ -309,8 +328,10 @@ def main():
             "Predicting generic properties",
             [
                 sys.executable,
-                os.path.join(project_dir, "MODULES", "generic_properties.py"),
-                "-i", active_input
+                "-m",
+                "hades.generic_properties",
+                "-i",
+                active_input,
             ]
         ))
 
@@ -319,9 +340,12 @@ def main():
             "Predicting detonation properties",
             [
                 sys.executable,
-                os.path.join(project_dir, "MODULES", "det_v_p.py"),
-                "-i", active_input,
-                "-dir", args.outdir,
+                "-m",
+                "hades.det_v_p",
+                "-i",
+                active_input,
+                "-dir",
+                args.outdir,
             ]
         ))
 
