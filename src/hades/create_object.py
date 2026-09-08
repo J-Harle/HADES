@@ -361,7 +361,12 @@ def get_mace_calculator():
         Configured MACE calculator using CPU and float64 precision.
     """
     parent_dir = os.getcwd()
-    calc_dir = os.path.join(parent_dir, "MODULES", "TOOLS", "CALCULATORS")
+    
+    calc_dir = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "TOOLS",
+    "CALCULATORS",)
+
     os.makedirs(calc_dir, exist_ok=True)
 
     model_file = os.path.join(calc_dir, "MACE-OFF23_small.model")
