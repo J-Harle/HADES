@@ -4,10 +4,10 @@
 High-throughput Analysis for the Design of Energetic Systems
 
 ## Installation
-git clone https://github.com/J-Harle/HADES.git
-cd HADES
-python -m pip install -e .
-hades --help
+git clone https://github.com/J-Harle/HADES.git <br>
+cd HADES <br>
+python -m pip install -e . <br>
+hades --help <br>
 ## Command Line Interface (CLI)
 
 Options:
