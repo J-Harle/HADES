@@ -379,11 +379,13 @@ def get_mace_calculator():
         urllib.request.urlretrieve(url, model_file)
 
     with suppress_output():
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(device)
         calc = MACECalculator(
             model_paths=[model_file],
             dispersion=False,
             default_dtype="float64",
-            device="cpu",
+            device=device,
         )
     return calc
 
