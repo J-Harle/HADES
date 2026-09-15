@@ -196,22 +196,24 @@ def read_prediction_data(input_csv, csv_dir="."):
 # =========================================================
 
 def write_predictions_csv(data, output_csv, fieldnames, csv_dir="."):
-
     csv_dir = os.path.abspath(csv_dir)
     csv_path = resolve_path(output_csv, csv_dir)
 
     os.makedirs(os.path.dirname(csv_path), exist_ok=True)
 
-    # Remove unwanted intermediate calculation columns
     output_fieldnames = [
         field
         for field in fieldnames
         if field not in DROP_AFTER_PREDICTION_COLUMNS
     ]
 
-    # Add predicted_H50 as a new column if it is not already present
-    if "predicted_H50" not in output_fieldnames:
-        output_fieldnames.append("predicted_H50")
+    # Remove the old prediction column if it already exists
+    if "predicted_H50" in output_fieldnames:
+        output_fieldnames.remove("predicted_H50")
+
+    # Add the calculated metric
+    if "metric" not in output_fieldnames:
+        output_fieldnames.append("metric")
 
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
 
@@ -231,25 +233,78 @@ def write_predictions_csv(data, output_csv, fieldnames, csv_dir="."):
 
             original_row = mol.get("original_row", {}).copy()
 
-            # Keep only columns that are allowed in the output
             row = {
                 key: value
                 for key, value in original_row.items()
                 if key in output_fieldnames
             }
 
-            predicted_h50 = mol.get("predicted_H50")
+            metric = mol.get("metric")
 
-            if predicted_h50 is None:
-                row["predicted_H50"] = ""
-            elif isinstance(predicted_h50, float) and np.isnan(predicted_h50):
-                row["predicted_H50"] = "nan"
+            if metric is None:
+                row["metric"] = ""
+            elif isinstance(metric, (float, np.floating)) and np.isnan(metric):
+                row["metric"] = "nan"
             else:
-                row["predicted_H50"] = predicted_h50
+                row["metric"] = metric
 
             writer.writerow(row)
 
     return csv_path
+
+#     csv_dir = os.path.abspath(csv_dir)
+#     csv_path = resolve_path(output_csv, csv_dir)
+
+#     os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+
+#     # Remove unwanted intermediate calculation columns
+#     output_fieldnames = [
+#         field
+#         for field in fieldnames
+#         if field not in DROP_AFTER_PREDICTION_COLUMNS
+#     ]
+
+#     # Add predicted_H50 as a new column if it is not already present
+#     if "predicted_H50" not in output_fieldnames:
+#         output_fieldnames.append("predicted_H50")
+
+#     with open(csv_path, "w", newline="", encoding="utf-8") as f:
+
+#         writer = csv.DictWriter(
+#             f,
+#             fieldnames=output_fieldnames,
+#             extrasaction="ignore"
+#         )
+
+#         writer.writeheader()
+
+#         for mol in tqdm(
+#             data,
+#             desc=f"Writing {os.path.basename(csv_path)}",
+#             unit=" molecules"
+#         ):
+
+#             original_row = mol.get("original_row", {}).copy()
+
+#             # Keep only columns that are allowed in the output
+#             row = {
+#                 key: value
+#                 for key, value in original_row.items()
+#                 if key in output_fieldnames
+#             }
+
+#             predicted_h50 = mol.get("predicted_H50")
+
+#             if predicted_h50 is None:
+#                 row["predicted_H50"] = ""
+#             elif isinstance(predicted_h50, float) and np.isnan(predicted_h50):
+#                 row["predicted_H50"] = "nan"
+#             else:
+#                 row["predicted_H50"] = predicted_h50
+
+#             writer.writerow(row)
+
+#     return csv_path
 
 # =========================================================
 # OPTIONAL FITTING / PLOTTING FUNCTION

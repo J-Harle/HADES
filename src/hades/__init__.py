@@ -28,27 +28,24 @@ from .det_v_p import (
     det_v,
 )
 
+from .properties import calculate_properties
 
 __version__ = "1.0.0"
 
-
 __all__ = [
-    # Module aliases
+    # Existing entries...
     "eof",
     "detonation",
-
-    # Oxygen balance
     "atom_counts_from_smiles",
     "oxygen_balance",
-
-    # Enthalpy of formation
     "calculate_hf",
     "calculate_hr",
     "filter_and_average",
-
-    # Detonation properties
     "calc_gas_products",
     "calc_phi",
     "det_v",
     "det_p",
+
+    # High-level API
+    "calculate_properties",
 ]
