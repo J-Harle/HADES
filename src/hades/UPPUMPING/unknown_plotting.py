@@ -1,5 +1,4 @@
 import os
-import json
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
@@ -42,7 +41,7 @@ DROP_AFTER_PREDICTION_COLUMNS = {
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Predict H50 values from calculated up-pumped metrics."
+        description="Calculate up-pumped impact-sensitivity metrics."
     )
 
     parser.add_argument(
@@ -65,20 +64,6 @@ def parse_args():
         type=str,
         default=None,
         help="Output prediction CSV filename or path. Default: <input>_predictions.csv"
-    )
-
-    parser.add_argument(
-        "--a",
-        type=float,
-        default=0.065785,
-        help="Gradient of manual H50 fit. Default: 0.065785"
-    )
-
-    parser.add_argument(
-        "--b",
-        type=float,
-        default=0.011077,
-        help="Intercept of manual H50 fit. Default: 0.011077"
     )
 
     return parser.parse_args()
@@ -108,12 +93,10 @@ def count_csv_rows(csv_path):
     return max(total_lines - 1, 0)
 
 
-def default_prediction_output(input_csv):
+def default_metric_output(input_csv):
     """
-    Create a safe default output name.
-
     Example:
-        hades_out_raw.csv -> hades_out_raw_predictions.csv
+        hades_out_raw.csv -> hades_out_raw_metrics.csv
     """
     base = os.path.basename(input_csv)
     stem, ext = os.path.splitext(base)
@@ -121,8 +104,7 @@ def default_prediction_output(input_csv):
     if ext == "":
         ext = ".csv"
 
-    return f"{stem}_predictions{ext}"
-
+    return f"{stem}_metrics{ext}"
 
 # =========================================================
 # READ DATA
@@ -195,7 +177,8 @@ def read_prediction_data(input_csv, csv_dir="."):
 # WRITE DATA
 # =========================================================
 
-def write_predictions_csv(data, output_csv, fieldnames, csv_dir="."):
+def write_metrics_csv(data, output_csv, fieldnames, csv_dir="."):
+
     csv_dir = os.path.abspath(csv_dir)
     csv_path = resolve_path(output_csv, csv_dir)
 
@@ -251,60 +234,6 @@ def write_predictions_csv(data, output_csv, fieldnames, csv_dir="."):
             writer.writerow(row)
 
     return csv_path
-
-#     csv_dir = os.path.abspath(csv_dir)
-#     csv_path = resolve_path(output_csv, csv_dir)
-
-#     os.makedirs(os.path.dirname(csv_path), exist_ok=True)
-
-#     # Remove unwanted intermediate calculation columns
-#     output_fieldnames = [
-#         field
-#         for field in fieldnames
-#         if field not in DROP_AFTER_PREDICTION_COLUMNS
-#     ]
-
-#     # Add predicted_H50 as a new column if it is not already present
-#     if "predicted_H50" not in output_fieldnames:
-#         output_fieldnames.append("predicted_H50")
-
-#     with open(csv_path, "w", newline="", encoding="utf-8") as f:
-
-#         writer = csv.DictWriter(
-#             f,
-#             fieldnames=output_fieldnames,
-#             extrasaction="ignore"
-#         )
-
-#         writer.writeheader()
-
-#         for mol in tqdm(
-#             data,
-#             desc=f"Writing {os.path.basename(csv_path)}",
-#             unit=" molecules"
-#         ):
-
-#             original_row = mol.get("original_row", {}).copy()
-
-#             # Keep only columns that are allowed in the output
-#             row = {
-#                 key: value
-#                 for key, value in original_row.items()
-#                 if key in output_fieldnames
-#             }
-
-#             predicted_h50 = mol.get("predicted_H50")
-
-#             if predicted_h50 is None:
-#                 row["predicted_H50"] = ""
-#             elif isinstance(predicted_h50, float) and np.isnan(predicted_h50):
-#                 row["predicted_H50"] = "nan"
-#             else:
-#                 row["predicted_H50"] = predicted_h50
-
-#             writer.writerow(row)
-
-#     return csv_path
 
 # =========================================================
 # OPTIONAL FITTING / PLOTTING FUNCTION
@@ -415,39 +344,29 @@ def plot_final(all_data, dpi=100, save_path=None):
 # PREDICTION
 # =========================================================
 
-def predict_h50(all_data, a, b):
+def calculate_metrics(all_data):
 
     for mol in tqdm(
         all_data,
-        desc="Predicting H50",
+        desc="Calculating metric",
         unit=" molecules"
     ):
 
         exp_ratio = mol.get("exp_ratio")
         raw_integral = mol.get("raw_integral")
 
-        # Prediction cannot be calculated if either value is missing
         if exp_ratio is None or raw_integral is None:
-            mol["predicted_H50"] = np.nan
+            mol["metric"] = np.nan
             continue
 
         metric = raw_integral * exp_ratio
-        denominator = metric - b
 
-        # Avoid division by zero
-        if abs(denominator) < 1e-12:
-            predicted_h50 = np.nan
-        else:
-            predicted_h50 = a / denominator
+        if not np.isfinite(metric):
+            metric = np.nan
 
-            # Replace negative or non-finite predictions with NaN
-            if predicted_h50 < 0 or not np.isfinite(predicted_h50):
-                predicted_h50 = np.nan
-
-        mol["predicted_H50"] = predicted_h50
+        mol["metric"] = metric
 
     return all_data
-
 
 # =========================================================
 # MAIN
@@ -460,45 +379,22 @@ if __name__ == "__main__":
     csv_dir = os.path.abspath(args.csv_dir)
 
     if args.output is None:
-        output_csv = default_prediction_output(args.input)
+        output_csv = default_metric_output(args.input)
     else:
         output_csv = args.output
-
-    # print(f"\nProcessing: {args.input}")
-    # print(f"Input directory: {csv_dir}")
-    # print(f"Output CSV: {output_csv}")
-    # print(f"[INFO] Using manual fit: y = ({args.a}) * (1/H50) + ({args.b})")
-
-    # ==========================================
-    # LOAD DATA
-    # ==========================================
 
     unknown_data, fieldnames = read_prediction_data(
         input_csv=args.input,
         csv_dir=csv_dir
     )
 
-    # ==========================================
-    # PREDICT H50
-    # ==========================================
+    unknown_data = calculate_metrics(unknown_data)
 
-    unknown_data = predict_h50(
-        unknown_data,
-        args.a,
-        args.b
-    )
-
-    # ==========================================
-    # WRITE PREDICTIONS
-    # ==========================================
-
-    output_path = write_predictions_csv(
+    output_path = write_metrics_csv(
         unknown_data,
         output_csv,
         fieldnames,
         csv_dir=csv_dir
     )
-
-    # print(f"\n[INFO] CSV writing complete: {output_path}")
 
     del unknown_data
